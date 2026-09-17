@@ -1,17 +1,5 @@
 import db from "../db.server";
-
-/*
- * =========================================================
- * ENTWICKLUNG
- * =========================================================
- *
- * Später wird diese ID durch die echte Shopify Customer ID
- * des eingeloggten Kunden ersetzt.
- */
-
-const DEVELOPMENT_CUSTOMER_ID =
-  "development-test-customer";
-
+import { authenticate } from "../shopify.server";
 
 /*
  * =========================================================
@@ -20,26 +8,73 @@ const DEVELOPMENT_CUSTOMER_ID =
  */
 
 export const action = async ({ request }) => {
+  let cors = (response) => response;
+
   try {
-    const body = await request.json();
+    /*
+     * =====================================================
+     * SHOPIFY-KUNDEN AUTHENTIFIZIEREN
+     * =====================================================
+     */
+
+    const authentication =
+      await authenticate.public.customerAccount(request);
+
+    cors = authentication.cors;
+
+    const sessionToken =
+      authentication.sessionToken;
+
+    const customerId =
+      sessionToken?.sub ?? null;
+
+    if (!customerId) {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Kunden-ID konnte nicht ermittelt werden.",
+          },
+          {
+            status: 401,
+          }
+        )
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * REQUEST-DATEN LADEN
+     * =====================================================
+     */
+
+    const body =
+      await request.json();
 
     const productId =
       body?.productId;
 
 
     /*
-     * Produkt-ID prüfen
+     * =====================================================
+     * PRODUKT-ID PRÜFEN
+     * =====================================================
      */
 
     if (!productId) {
-      return Response.json(
-        {
-          success: false,
-          error: "Produkt-ID fehlt.",
-        },
-        {
-          status: 400,
-        }
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Produkt-ID fehlt.",
+          },
+          {
+            status: 400,
+          }
+        )
       );
     }
 
@@ -49,18 +84,20 @@ export const action = async ({ request }) => {
      * PRODUKT SUCHEN
      * =====================================================
      *
-     * Wir prüfen zusätzlich customerId.
-     * Dadurch kann ein Anbieter später nur seine
-     * eigenen Produkte löschen.
+     * Zusätzlich zur Produkt-ID wird die echte
+     * Shopify Customer ID geprüft.
+     *
+     * Dadurch kann ein Anbieter nur seine eigenen
+     * Produkte löschen.
      */
 
     const existingProduct =
       await db.marketplaceProduct.findFirst({
         where: {
-          id: productId,
+          id:
+            String(productId),
 
-          customerId:
-            DEVELOPMENT_CUSTOMER_ID,
+          customerId,
 
           status: {
             not: "deleted",
@@ -70,14 +107,17 @@ export const action = async ({ request }) => {
 
 
     if (!existingProduct) {
-      return Response.json(
-        {
-          success: false,
-          error: "Produkt wurde nicht gefunden.",
-        },
-        {
-          status: 404,
-        }
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Produkt wurde nicht gefunden.",
+          },
+          {
+            status: 404,
+          }
+        )
       );
     }
 
@@ -87,51 +127,105 @@ export const action = async ({ request }) => {
      * SOFT DELETE
      * =====================================================
      *
-     * Der Datensatz bleibt in der Datenbank erhalten.
-     * Er wird nur als gelöscht markiert.
+     * Der Datensatz bleibt in PostgreSQL bestehen.
+     * Er wird lediglich als gelöscht markiert.
      */
 
     const deletedProduct =
       await db.marketplaceProduct.update({
         where: {
-          id: existingProduct.id,
+          id:
+            existingProduct.id,
         },
 
         data: {
-          status: "deleted",
+          status:
+            "deleted",
         },
       });
 
 
     /*
      * =====================================================
-     * ERFOLG
+     * NEUE PAKETBELEGUNG BERECHNEN
+     * =====================================================
+     *
+     * Da gelöschte Produkte nicht mehr auf das
+     * Produktlimit angerechnet werden, zählen wir
+     * die verbleibenden Produkte neu.
+     */
+
+    const usedProducts =
+      await db.marketplaceProduct.count({
+        where: {
+          customerId,
+
+          status: {
+            not: "deleted",
+          },
+        },
+      });
+
+    const subscription =
+      await db.subscription.findUnique({
+        where: {
+          customerId,
+        },
+      });
+
+    const productLimit =
+      subscription?.productLimit ?? 0;
+
+    const availableProducts =
+      Math.max(
+        productLimit - usedProducts,
+        0
+      );
+
+
+    /*
+     * =====================================================
+     * ERFOLGREICHE ANTWORT
      * =====================================================
      */
 
-    return Response.json({
-      success: true,
+    return cors(
+      Response.json({
+        success: true,
 
-      message:
-        "Produkt wurde erfolgreich gelöscht.",
+        message:
+          "Produkt wurde erfolgreich gelöscht.",
 
-      product: {
-        id:
-          deletedProduct.id,
+        product: {
+          id:
+            deletedProduct.id,
 
-        status:
-          deletedProduct.status,
+          title:
+            deletedProduct.title,
 
-        shopifyProductId:
-          deletedProduct.shopifyProductId,
+          status:
+            deletedProduct.status,
 
-        shopifyVariantId:
-          deletedProduct.shopifyVariantId,
+          shopifyProductId:
+            deletedProduct.shopifyProductId,
 
-        updatedAt:
-          deletedProduct.updatedAt,
-      },
-    });
+          shopifyVariantId:
+            deletedProduct.shopifyVariantId,
+
+          shopifyHandle:
+            deletedProduct.shopifyHandle,
+
+          updatedAt:
+            deletedProduct.updatedAt,
+        },
+
+        package: {
+          productLimit,
+          usedProducts,
+          availableProducts,
+        },
+      })
+    );
 
   } catch (error) {
     console.error(
@@ -139,18 +233,20 @@ export const action = async ({ request }) => {
       error
     );
 
-    return Response.json(
-      {
-        success: false,
+    return cors(
+      Response.json(
+        {
+          success: false,
 
-        error:
-          error instanceof Error
-            ? error.message
-            : "Produkt konnte nicht gelöscht werden.",
-      },
-      {
-        status: 500,
-      }
+          error:
+            error instanceof Error
+              ? error.message
+              : "Produkt konnte nicht gelöscht werden.",
+        },
+        {
+          status: 500,
+        }
+      )
     );
   }
 };
@@ -166,6 +262,7 @@ export const loader = async () => {
   return Response.json(
     {
       success: false,
+
       error:
         "Diese Schnittstelle erwartet eine POST-Anfrage.",
     },

@@ -1,4 +1,9 @@
-import { authenticate } from "../shopify.server";
+import db from "../db.server";
+import {
+  authenticate,
+  unauthenticated,
+} from "../shopify.server";
+
 
 /*
  * =========================================================
@@ -35,13 +40,6 @@ function normalizePrice(value) {
     .trim()
     .replace(/\s/g, "");
 
-  /*
-   * Unterstützt z.B.
-   *
-   * 23
-   * 23.00
-   * 23,00
-   */
   if (
     price.includes(",") &&
     !price.includes(".")
@@ -64,19 +62,41 @@ function normalizePrice(value) {
 
 /*
  * =========================================================
+ * BILDER AUS DATENBANK LESEN
+ * =========================================================
+ */
+
+function parseImages(value) {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const images = JSON.parse(value);
+
+    return Array.isArray(images)
+      ? images
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+
+/*
+ * =========================================================
  * BILDER FÜR SHOPIFY VORBEREITEN
  * =========================================================
  */
 
 function prepareMedia(product) {
-  if (!Array.isArray(product?.images)) {
-    return [];
-  }
+  const images =
+    parseImages(product.images);
 
   const seen = new Set();
   const media = [];
 
-  for (const image of product.images) {
+  for (const image of images) {
     if (
       !image ||
       typeof image !== "string"
@@ -95,33 +115,29 @@ function prepareMedia(product) {
         continue;
       }
 
-      /*
-       * Nur eindeutige URLs übernehmen.
-       */
-      const key = url.href;
-
-      if (seen.has(key)) {
+      if (seen.has(url.href)) {
         continue;
       }
 
-      seen.add(key);
+      seen.add(url.href);
 
       media.push({
-        originalSource: url.href,
-        mediaContentType: "IMAGE",
-        alt: product.title || "Produktbild",
+        originalSource:
+          url.href,
+
+        mediaContentType:
+          "IMAGE",
+
+        alt:
+          product.title ||
+          "Produktbild",
       });
 
-      /*
-       * Maximal 10 Bilder.
-       */
       if (media.length >= 10) {
         break;
       }
     } catch {
-      /*
-       * Ungültige Bild-URL ignorieren.
-       */
+      // Ungültige Bild-URL ignorieren.
     }
   }
 
@@ -135,120 +151,263 @@ function prepareMedia(product) {
  * =========================================================
  */
 
-export const action = async ({
-  request,
-}) => {
+export const action = async ({ request }) => {
+  let cors = (response) => response;
+
   try {
-    const body =
-      await request.json();
-
-    const product =
-      body?.product;
-
     /*
      * =====================================================
-     * EINGABEDATEN PRÜFEN
+     * 1. SHOPIFY-KUNDEN AUTHENTIFIZIEREN
      * =====================================================
      */
 
-    if (!product) {
-      return Response.json(
-        {
-          success: false,
-          error:
-            "Keine Produktdaten übermittelt.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    if (
-      !product.title ||
-      !String(product.title).trim()
-    ) {
-      return Response.json(
-        {
-          success: false,
-          error:
-            "Produkttitel fehlt.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    if (
-      !product.sourceUrl ||
-      !String(product.sourceUrl).trim()
-    ) {
-      return Response.json(
-        {
-          success: false,
-          error:
-            "Original-Produkt-URL fehlt.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /*
-     * ORIGINAL-URL PRÜFEN
-     */
-
-    let sourceUrl;
-
-    try {
-      const parsed =
-        new URL(product.sourceUrl);
-
-      if (
-        !["http:", "https:"].includes(
-          parsed.protocol
-        )
-      ) {
-        throw new Error();
-      }
-
-      sourceUrl =
-        parsed.href;
-    } catch {
-      return Response.json(
-        {
-          success: false,
-          error:
-            "Die Original-Produkt-URL ist ungültig.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /*
-     * =====================================================
-     * SHOPIFY ADMIN AUTHENTIFIZIEREN
-     * =====================================================
-     */
-
-    const { admin } =
-      await authenticate.admin(
+    const authentication =
+      await authenticate.public.customerAccount(
         request
       );
 
+    cors = authentication.cors;
+
+    const sessionToken =
+      authentication.sessionToken;
+
+    const customerId =
+      sessionToken?.sub ?? null;
+
+    if (!customerId) {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Kunden-ID konnte nicht ermittelt werden.",
+          },
+          {
+            status: 401,
+          }
+        )
+      );
+    }
+
+
     /*
      * =====================================================
-     * DATEN VORBEREITEN
+     * 2. NUR PRODUKT-ID AUS REQUEST ÜBERNEHMEN
+     * =====================================================
+     *
+     * Produktdaten wie Preis, URL oder Anbieter werden
+     * NICHT aus dem Browser übernommen.
+     */
+
+    const body =
+      await request.json();
+
+    const productId =
+      body?.productId;
+
+    if (!productId) {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Produkt-ID fehlt.",
+          },
+          {
+            status: 400,
+          }
+        )
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * 3. PRODUKT AUS POSTGRESQL LADEN
+     * =====================================================
+     *
+     * Gleichzeitig wird geprüft, ob das Produkt wirklich
+     * dem angemeldeten Anbieter gehört.
+     */
+
+    const product =
+      await db.marketplaceProduct.findFirst({
+        where: {
+          id:
+            String(productId),
+
+          customerId,
+
+          status: {
+            not: "deleted",
+          },
+        },
+      });
+
+    if (!product) {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Produkt wurde nicht gefunden oder gehört nicht zu diesem Anbieter.",
+          },
+          {
+            status: 404,
+          }
+        )
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * 4. DOPPELTE VERÖFFENTLICHUNG VERHINDERN
+     * =====================================================
+     */
+
+    if (product.shopifyProductId) {
+      return cors(
+        Response.json(
+          {
+            success: false,
+
+            error:
+              "Dieses Produkt wurde bereits an Marktblatt übertragen.",
+
+            product: {
+              id:
+                product.id,
+
+              shopifyProductId:
+                product.shopifyProductId,
+
+              shopifyVariantId:
+                product.shopifyVariantId,
+
+              shopifyHandle:
+                product.shopifyHandle,
+            },
+          },
+          {
+            status: 409,
+          }
+        )
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * 5. AKTIVES PAKET PRÜFEN
+     * =====================================================
+     */
+
+    const subscription =
+      await db.subscription.findUnique({
+        where: {
+          customerId,
+        },
+      });
+
+    if (!subscription) {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Für diesen Anbieter wurde kein Marktblatt-Paket gefunden.",
+          },
+          {
+            status: 403,
+          }
+        )
+      );
+    }
+
+    if (subscription.status !== "active") {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Das Marktblatt-Paket ist nicht aktiv.",
+          },
+          {
+            status: 403,
+          }
+        )
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * 6. MARKTBLATT-SHOP FESTLEGEN
+     * =====================================================
+     *
+     * Die Domain kommt ausschließlich aus der
+     * serverseitigen Umgebungsvariable.
+     */
+
+    const marktblattShop =
+      process.env.MARKTBLATT_SHOP;
+
+    if (!marktblattShop) {
+      throw new Error(
+        "MARKTBLATT_SHOP ist auf dem Server nicht konfiguriert."
+      );
+    }
+
+    if (
+      !marktblattShop.endsWith(
+        ".myshopify.com"
+      )
+    ) {
+      throw new Error(
+        "MARKTBLATT_SHOP enthält keine gültige Shopify-Shop-Domain."
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * 7. ADMIN-API FÜR MARKTBLATT.ONLINE LADEN
+     * =====================================================
+     *
+     * Dafür wird die bereits gespeicherte Offline-Session
+     * des Marktblatt-Shops verwendet.
+     */
+
+    const { admin } =
+      await unauthenticated.admin(
+        marktblattShop
+      );
+
+
+    /*
+     * =====================================================
+     * 8. PRODUKTDATEN VORBEREITEN
      * =====================================================
      */
 
     const title =
-      String(product.title)
-        .trim();
+      String(product.title).trim();
+
+    if (!title) {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Produkttitel fehlt.",
+          },
+          {
+            status: 400,
+          }
+        )
+      );
+    }
 
     const description =
       product.description
@@ -273,19 +432,57 @@ export const action = async ({
       product.currency
         ? String(
             product.currency
-          ).toUpperCase()
+          )
+            .trim()
+            .toUpperCase()
         : "EUR";
+
+
+    /*
+     * ORIGINAL-URL PRÜFEN
+     */
+
+    let sourceUrl;
+
+    try {
+      const parsed =
+        new URL(
+          product.sourceUrl
+        );
+
+      if (
+        !["http:", "https:"].includes(
+          parsed.protocol
+        )
+      ) {
+        throw new Error();
+      }
+
+      sourceUrl =
+        parsed.href;
+    } catch {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Die gespeicherte Original-Produkt-URL ist ungültig.",
+          },
+          {
+            status: 400,
+          }
+        )
+      );
+    }
 
     const media =
       prepareMedia(product);
 
+
     /*
      * =====================================================
-     * 1. SHOPIFY-PRODUKT + BILDER ANLEGEN
+     * 9. SHOPIFY-PRODUKT ALS ENTWURF ANLEGEN
      * =====================================================
-     *
-     * Bilder werden direkt über productCreate(media: ...)
-     * an Shopify übergeben.
      */
 
     const createResponse =
@@ -348,14 +545,12 @@ export const action = async ({
               vendor,
 
               /*
-               * Neue Anbieterprodukte zunächst
-               * immer als ENTWURF anlegen.
+               * Anbieterprodukte zunächst immer
+               * als Entwurf anlegen.
                */
-              status: "DRAFT",
+              status:
+                "DRAFT",
 
-              /*
-               * Marktblatt-spezifische Daten.
-               */
               metafields: [
                 {
                   namespace:
@@ -398,6 +593,40 @@ export const action = async ({
                   value:
                     "true",
                 },
+
+                /*
+                 * Interne Zuordnung zum Anbieter.
+                 */
+                {
+                  namespace:
+                    "marktblatt",
+
+                  key:
+                    "marketplace_customer_id",
+
+                  type:
+                    "single_line_text_field",
+
+                  value:
+                    String(customerId),
+                },
+
+                /*
+                 * Interne Marktblatt-Produkt-ID.
+                 */
+                {
+                  namespace:
+                    "marktblatt",
+
+                  key:
+                    "marketplace_product_id",
+
+                  type:
+                    "single_line_text_field",
+
+                  value:
+                    String(product.id),
+                },
               ],
             },
 
@@ -409,9 +638,10 @@ export const action = async ({
     const createResult =
       await createResponse.json();
 
+
     /*
      * =====================================================
-     * GRAPHQL-FEHLER PRÜFEN
+     * 10. GRAPHQL-FEHLER PRÜFEN
      * =====================================================
      */
 
@@ -446,21 +676,23 @@ export const action = async ({
         createErrors
       );
 
-      return Response.json(
-        {
-          success: false,
+      return cors(
+        Response.json(
+          {
+            success: false,
 
-          error:
-            createErrors
-              .map(
-                (item) =>
-                  item.message
-              )
-              .join(", "),
-        },
-        {
-          status: 400,
-        }
+            error:
+              createErrors
+                .map(
+                  (item) =>
+                    item.message
+                )
+                .join(", "),
+          },
+          {
+            status: 400,
+          }
+        )
       );
     }
 
@@ -483,9 +715,10 @@ export const action = async ({
         ?.variants
         ?.nodes?.[0];
 
+
     /*
      * =====================================================
-     * 2. PREIS DER STANDARDVARIANTE SETZEN
+     * 11. PREIS DER STANDARDVARIANTE SETZEN
      * =====================================================
      */
 
@@ -585,51 +818,85 @@ export const action = async ({
         variantResult?.data
           ?.productVariantsBulkUpdate
           ?.productVariants?.[0]
-          ?.price || price;
+          ?.price ||
+        price;
     }
+
 
     /*
      * =====================================================
-     * 3. ERGEBNIS
+     * 12. SHOPIFY-ZUORDNUNG IN POSTGRESQL SPEICHERN
      * =====================================================
      */
 
-    return Response.json({
-      success: true,
+    const updatedProduct =
+      await db.marketplaceProduct.update({
+        where: {
+          id:
+            product.id,
+        },
 
-      message:
-        "Produkt wurde als Entwurf im Marktblatt-Shop angelegt.",
+        data: {
+          shopifyProductId,
 
-      product: {
-        shopifyProductId,
+          shopifyVariantId:
+            firstVariant?.id ||
+            null,
 
-        shopifyVariantId:
-          firstVariant?.id ||
-          null,
+          shopifyHandle:
+            createdProduct.handle ||
+            null,
+        },
+      });
 
-        title:
-          createdProduct.title,
 
-        handle:
-          createdProduct.handle,
+    /*
+     * =====================================================
+     * 13. ERFOLG
+     * =====================================================
+     */
 
-        vendor:
-          createdProduct.vendor,
+    return cors(
+      Response.json({
+        success: true,
 
-        status:
-          createdProduct.status,
+        message:
+          "Produkt wurde als Entwurf an Marktblatt.online übertragen.",
 
-        price:
-          finalPrice,
+        product: {
+          id:
+            updatedProduct.id,
 
-        currency,
+          shopifyProductId:
+            updatedProduct.shopifyProductId,
 
-        sourceUrl,
+          shopifyVariantId:
+            updatedProduct.shopifyVariantId,
 
-        imageCount:
-          media.length,
-      },
-    });
+          shopifyHandle:
+            updatedProduct.shopifyHandle,
+
+          title:
+            createdProduct.title,
+
+          vendor:
+            createdProduct.vendor,
+
+          status:
+            createdProduct.status,
+
+          price:
+            finalPrice,
+
+          currency,
+
+          sourceUrl,
+
+          imageCount:
+            media.length,
+        },
+      })
+    );
 
   } catch (error) {
     console.error(
@@ -637,18 +904,20 @@ export const action = async ({
       error
     );
 
-    return Response.json(
-      {
-        success: false,
+    return cors(
+      Response.json(
+        {
+          success: false,
 
-        error:
-          error instanceof Error
-            ? error.message
-            : "Produkt konnte nicht veröffentlicht werden.",
-      },
-      {
-        status: 500,
-      }
+          error:
+            error instanceof Error
+              ? error.message
+              : "Produkt konnte nicht veröffentlicht werden.",
+        },
+        {
+          status: 500,
+        }
+      )
     );
   }
 };
@@ -656,7 +925,7 @@ export const action = async ({
 
 /*
  * =========================================================
- * GET-AUFRUF
+ * GET NICHT ERLAUBT
  * =========================================================
  */
 

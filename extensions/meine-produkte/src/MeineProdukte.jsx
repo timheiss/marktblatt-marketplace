@@ -9,16 +9,12 @@ export default async () => {
 
 /*
  * =========================================================
- * ENTWICKLUNGS-API
+ * PRODUKTIONS-API
  * =========================================================
- *
- * ACHTUNG:
- * Die Cloudflare-Adresse kann sich nach einem Neustart
- * von "shopify app dev" ändern.
  */
 
 const API_BASE_URL =
-  'https://hawaiian-truck-crops-floor.trycloudflare.com';
+  'https://marktblatt-marketplace.onrender.com';
 
 
 function Extension() {
@@ -99,7 +95,7 @@ function Extension() {
 
   /*
    * =======================================================
-   * STATUS ÄNDERN
+   * STATUS / LÖSCHEN / ÜBERTRAGEN
    * =======================================================
    */
 
@@ -108,6 +104,10 @@ function Extension() {
 
   const [deletingProductId, setDeletingProductId] =
     useState(null);
+
+  const [publishingProductId, setPublishingProductId] =
+    useState(null);
+
 
   /*
    * =======================================================
@@ -137,6 +137,7 @@ function Extension() {
         `${API_BASE_URL}/api/product-list`,
         {
           method: 'GET',
+
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -212,6 +213,7 @@ function Extension() {
       setError(
         'Bitte geben Sie eine Produkt-URL ein.'
       );
+
       return;
     }
 
@@ -221,6 +223,7 @@ function Extension() {
       setError(
         'Bitte geben Sie eine gültige URL ein.'
       );
+
       return;
     }
 
@@ -296,6 +299,7 @@ function Extension() {
       setError(
         `Ihr Produktlimit von ${packageData.productLimit} Produkten ist erreicht.`
       );
+
       return;
     }
 
@@ -363,6 +367,125 @@ function Extension() {
 
   /*
    * =======================================================
+   * PRODUKT AN MARKTBLATT ÜBERTRAGEN
+   * =======================================================
+   */
+
+  async function publishProduct(product) {
+    if (!product?.id) {
+      return;
+    }
+
+    if (product.shopifyProductId) {
+      setSaveMessage(
+        'Dieses Produkt wurde bereits an Marktblatt übertragen.'
+      );
+
+      return;
+    }
+
+    try {
+      setPublishingProductId(
+        product.id
+      );
+
+      setError(null);
+      setSaveMessage(null);
+
+      const token =
+        await shopify.sessionToken.get();
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/product-publish`,
+        {
+          method: 'POST',
+
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+
+          body: JSON.stringify({
+            product: {
+              id:
+                product.id,
+
+              title:
+                product.title,
+
+              description:
+                product.description,
+
+              price:
+                product.price,
+
+              currency:
+                product.currency,
+
+              vendor:
+                product.vendor,
+
+              brand:
+                product.brand,
+
+              sourceUrl:
+                product.sourceUrl,
+
+              images:
+                Array.isArray(product.images)
+                  ? product.images
+                  : [],
+            },
+          }),
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            'Produkt konnte nicht an Marktblatt übertragen werden.'
+        );
+      }
+
+      setSaveMessage(
+        data.message ||
+          'Produkt wurde erfolgreich an Marktblatt übertragen.'
+      );
+
+      /*
+       * Produktliste neu laden.
+       *
+       * Wenn api.product-publish die Shopify-IDs
+       * in MarketplaceProduct gespeichert hat,
+       * erscheint anschließend automatisch
+       * "Marktblatt: Übertragen".
+       */
+
+      await loadProducts();
+
+    } catch (err) {
+      console.error(
+        'PRODUCT PUBLISH ERROR:',
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Produkt konnte nicht an Marktblatt übertragen werden.'
+      );
+
+    } finally {
+      setPublishingProductId(null);
+    }
+  }
+
+
+  /*
+   * =======================================================
    * BEARBEITEN STARTEN
    * =======================================================
    */
@@ -416,6 +539,7 @@ function Extension() {
       setError(
         'Bitte geben Sie einen Produkttitel ein.'
       );
+
       return;
     }
 
@@ -494,10 +618,6 @@ function Extension() {
    * =======================================================
    * STATUS DAUERHAFT ÄNDERN
    * =======================================================
-   *
-   * draft    -> active
-   * inactive -> active
-   * active   -> inactive
    */
 
   async function toggleProductStatus(product) {
@@ -560,11 +680,6 @@ function Extension() {
           )
       );
 
-      /*
-       * Nach erfolgreicher Speicherung
-       * Daten erneut aus Prisma laden.
-       */
-
       await loadProducts();
 
     } catch (err) {
@@ -589,92 +704,80 @@ function Extension() {
    * =======================================================
    * PRODUKT LÖSCHEN
    * =======================================================
-   *
-   * Noch lokal.
-   * Die Datenbank-Anbindung bauen wir als Nächstes.
    */
 
-async function deleteProduct(product) {
-  if (!product?.id) {
-    return;
-  }
+  async function deleteProduct(product) {
+    if (!product?.id) {
+      return;
+    }
 
-  try {
-    setDeletingProductId(product.id);
-    setError(null);
-    setSaveMessage(null);
-
-    const token =
-      await shopify.sessionToken.get();
-
-    const response = await fetch(
-      `${API_BASE_URL}/api/product-delete`,
-      {
-        method: 'POST',
-
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-
-        body: JSON.stringify({
-          productId: product.id,
-        }),
-      }
-    );
-
-    const data =
-      await response.json();
-
-    if (!response.ok || !data.success) {
-      throw new Error(
-        data.error ||
-          'Produkt konnte nicht gelöscht werden.'
+    try {
+      setDeletingProductId(
+        product.id
       );
+
+      setError(null);
+      setSaveMessage(null);
+
+      const token =
+        await shopify.sessionToken.get();
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/product-delete`,
+        {
+          method: 'POST',
+
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+
+          body: JSON.stringify({
+            productId:
+              product.id,
+          }),
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            'Produkt konnte nicht gelöscht werden.'
+        );
+      }
+
+      if (
+        editingProduct?.id === product.id
+      ) {
+        cancelEditing();
+      }
+
+      setSaveMessage(
+        data.message ||
+          'Produkt wurde erfolgreich gelöscht.'
+      );
+
+      await loadProducts();
+
+    } catch (err) {
+      console.error(
+        'PRODUCT DELETE ERROR:',
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Produkt konnte nicht gelöscht werden.'
+      );
+
+    } finally {
+      setDeletingProductId(null);
     }
-
-    /*
-     * Falls dieses Produkt gerade bearbeitet wird,
-     * Bearbeitungsbereich schließen.
-     */
-
-    if (
-      editingProduct?.id === product.id
-    ) {
-      cancelEditing();
-    }
-
-    setSaveMessage(
-      data.message ||
-        'Produkt wurde erfolgreich gelöscht.'
-    );
-
-    /*
-     * Produktliste erneut aus Prisma laden.
-     *
-     * Dadurch verschwindet das gelöschte Produkt
-     * automatisch aus der Liste und auch das
-     * Produktlimit wird aktualisiert.
-     */
-
-    await loadProducts();
-
-  } catch (err) {
-    console.error(
-      'PRODUCT DELETE ERROR:',
-      err
-    );
-
-    setError(
-      err instanceof Error
-        ? err.message
-        : 'Produkt konnte nicht gelöscht werden.'
-    );
-
-  } finally {
-    setDeletingProductId(null);
   }
-}
 
 
   /*
@@ -900,6 +1003,19 @@ async function deleteProduct(product) {
                         changingStatusId ===
                         product.id;
 
+                      const productDeleting =
+                        deletingProductId ===
+                        product.id;
+
+                      const productPublishing =
+                        publishingProductId ===
+                        product.id;
+
+                      const alreadyPublished =
+                        Boolean(
+                          product.shopifyProductId
+                        );
+
                       return (
 
                         <s-section
@@ -953,6 +1069,15 @@ async function deleteProduct(product) {
                             </s-text>
 
 
+                            <s-text>
+                              Marktblatt:{' '}
+
+                              {alreadyPublished
+                                ? 'Übertragen'
+                                : 'Noch nicht übertragen'}
+                            </s-text>
+
+
                             <s-stack
                               direction="inline"
                               gap="small"
@@ -965,7 +1090,9 @@ async function deleteProduct(product) {
                                   )
                                 }
                                 disabled={
-                                  statusChanging
+                                  statusChanging ||
+                                  productDeleting ||
+                                  productPublishing
                                 }
                               >
                                 Bearbeiten
@@ -979,7 +1106,9 @@ async function deleteProduct(product) {
                                   )
                                 }
                                 disabled={
-                                  statusChanging
+                                  statusChanging ||
+                                  productDeleting ||
+                                  productPublishing
                                 }
                               >
 
@@ -993,19 +1122,52 @@ async function deleteProduct(product) {
                               </s-button>
 
 
+                              {!alreadyPublished && (
+
+                                <s-button
+                                  variant="primary"
+
+                                  onClick={() =>
+                                    publishProduct(
+                                      product
+                                    )
+                                  }
+
+                                  disabled={
+                                    statusChanging ||
+                                    productDeleting ||
+                                    productPublishing
+                                  }
+                                >
+
+                                  {productPublishing
+                                    ? 'Wird übertragen...'
+                                    : 'An Marktblatt übertragen'}
+
+                                </s-button>
+
+                              )}
+
+
                               <s-button
-                            onClick={() =>
-                                deleteProduct(product)
-                            }
-                            disabled={
-                                statusChanging ||
-                                deletingProductId === product.id
-                            }
-                            >
-                            {deletingProductId === product.id
-                                ? 'Produkt wird gelöscht...'
-                                : 'Löschen'}
-                            </s-button>
+                                onClick={() =>
+                                  deleteProduct(
+                                    product
+                                  )
+                                }
+
+                                disabled={
+                                  statusChanging ||
+                                  productDeleting ||
+                                  productPublishing
+                                }
+                              >
+
+                                {productDeleting
+                                  ? 'Produkt wird gelöscht...'
+                                  : 'Löschen'}
+
+                              </s-button>
 
                             </s-stack>
 

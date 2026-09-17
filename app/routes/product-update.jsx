@@ -1,27 +1,57 @@
 import db from "../db.server";
+import { authenticate } from "../shopify.server";
 
 /*
  * =========================================================
- * ENTWICKLUNG
- * =========================================================
- *
- * Später kommt die echte Shopify Customer ID
- * aus dem eingeloggten Kundenkonto.
- */
-
-const DEVELOPMENT_CUSTOMER_ID =
-  "development-test-customer";
-
-
-/*
- * =========================================================
- * API ACTION
+ * PRODUKT AKTUALISIEREN
  * =========================================================
  */
 
 export const action = async ({ request }) => {
+  let cors = (response) => response;
+
   try {
-    const body = await request.json();
+    /*
+     * =====================================================
+     * SHOPIFY-KUNDEN AUTHENTIFIZIEREN
+     * =====================================================
+     */
+
+    const authentication =
+      await authenticate.public.customerAccount(request);
+
+    cors = authentication.cors;
+
+    const sessionToken =
+      authentication.sessionToken;
+
+    const customerId =
+      sessionToken?.sub ?? null;
+
+    if (!customerId) {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Kunden-ID konnte nicht ermittelt werden.",
+          },
+          {
+            status: 401,
+          }
+        )
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * REQUEST-DATEN LADEN
+     * =====================================================
+     */
+
+    const body =
+      await request.json();
 
     const productId =
       body?.productId;
@@ -50,29 +80,32 @@ export const action = async ({ request }) => {
      */
 
     if (!productId) {
-      return Response.json(
-        {
-          success: false,
-          error:
-            "Produkt-ID fehlt.",
-        },
-        {
-          status: 400,
-        }
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Produkt-ID fehlt.",
+          },
+          {
+            status: 400,
+          }
+        )
       );
     }
 
-
     if (!title) {
-      return Response.json(
-        {
-          success: false,
-          error:
-            "Bitte geben Sie einen Produkttitel ein.",
-        },
-        {
-          status: 400,
-        }
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Bitte geben Sie einen Produkttitel ein.",
+          },
+          {
+            status: 400,
+          }
+        )
       );
     }
 
@@ -89,6 +122,10 @@ export const action = async ({ request }) => {
       let preparedPrice =
         price.replace(/\s/g, "");
 
+      /*
+       * Deutsches Dezimaltrennzeichen unterstützen.
+       */
+
       if (
         preparedPrice.includes(",") &&
         !preparedPrice.includes(".")
@@ -104,15 +141,17 @@ export const action = async ({ request }) => {
         !Number.isFinite(priceNumber) ||
         priceNumber < 0
       ) {
-        return Response.json(
-          {
-            success: false,
-            error:
-              "Bitte geben Sie einen gültigen Preis ein.",
-          },
-          {
-            status: 400,
-          }
+        return cors(
+          Response.json(
+            {
+              success: false,
+              error:
+                "Bitte geben Sie einen gültigen Preis ein.",
+            },
+            {
+              status: 400,
+            }
+          )
         );
       }
 
@@ -126,21 +165,20 @@ export const action = async ({ request }) => {
      * PRODUKT SUCHEN
      * =====================================================
      *
-     * Wichtig:
-     * Wir suchen nicht nur anhand der Produkt-ID,
-     * sondern zusätzlich anhand des Eigentümers.
+     * Produkt-ID UND echte Shopify Customer ID werden
+     * geprüft.
      *
-     * Dadurch kann ein Anbieter nicht einfach die ID
-     * eines fremden Produktes übergeben.
+     * Dadurch kann ein Anbieter niemals ein Produkt
+     * eines anderen Anbieters bearbeiten.
      */
 
     const existingProduct =
       await db.marketplaceProduct.findFirst({
         where: {
-          id: productId,
+          id:
+            String(productId),
 
-          customerId:
-            DEVELOPMENT_CUSTOMER_ID,
+          customerId,
 
           status: {
             not: "deleted",
@@ -148,17 +186,18 @@ export const action = async ({ request }) => {
         },
       });
 
-
     if (!existingProduct) {
-      return Response.json(
-        {
-          success: false,
-          error:
-            "Produkt wurde nicht gefunden.",
-        },
-        {
-          status: 404,
-        }
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Produkt wurde nicht gefunden.",
+          },
+          {
+            status: 404,
+          }
+        )
       );
     }
 
@@ -172,7 +211,8 @@ export const action = async ({ request }) => {
     const updatedProduct =
       await db.marketplaceProduct.update({
         where: {
-          id: existingProduct.id,
+          id:
+            existingProduct.id,
         },
 
         data: {
@@ -189,57 +229,59 @@ export const action = async ({ request }) => {
 
     /*
      * =====================================================
-     * ERFOLG
+     * ERFOLGREICHE ANTWORT
      * =====================================================
      */
 
-    return Response.json({
-      success: true,
+    return cors(
+      Response.json({
+        success: true,
 
-      message:
-        "Änderungen wurden erfolgreich gespeichert.",
+        message:
+          "Änderungen wurden erfolgreich gespeichert.",
 
-      product: {
-        id:
-          updatedProduct.id,
+        product: {
+          id:
+            updatedProduct.id,
 
-        title:
-          updatedProduct.title,
+          title:
+            updatedProduct.title,
 
-        description:
-          updatedProduct.description,
+          description:
+            updatedProduct.description,
 
-        price:
-          updatedProduct.price,
+          price:
+            updatedProduct.price,
 
-        currency:
-          updatedProduct.currency,
+          currency:
+            updatedProduct.currency,
 
-        vendor:
-          updatedProduct.vendor,
+          vendor:
+            updatedProduct.vendor,
 
-        brand:
-          updatedProduct.brand,
+          brand:
+            updatedProduct.brand,
 
-        sourceUrl:
-          updatedProduct.sourceUrl,
+          sourceUrl:
+            updatedProduct.sourceUrl,
 
-        status:
-          updatedProduct.status,
+          status:
+            updatedProduct.status,
 
-        shopifyProductId:
-          updatedProduct.shopifyProductId,
+          shopifyProductId:
+            updatedProduct.shopifyProductId,
 
-        shopifyVariantId:
-          updatedProduct.shopifyVariantId,
+          shopifyVariantId:
+            updatedProduct.shopifyVariantId,
 
-        shopifyHandle:
-          updatedProduct.shopifyHandle,
+          shopifyHandle:
+            updatedProduct.shopifyHandle,
 
-        updatedAt:
-          updatedProduct.updatedAt,
-      },
-    });
+          updatedAt:
+            updatedProduct.updatedAt,
+        },
+      })
+    );
 
   } catch (error) {
     console.error(
@@ -247,18 +289,20 @@ export const action = async ({ request }) => {
       error
     );
 
-    return Response.json(
-      {
-        success: false,
+    return cors(
+      Response.json(
+        {
+          success: false,
 
-        error:
-          error instanceof Error
-            ? error.message
-            : "Produkt konnte nicht aktualisiert werden.",
-      },
-      {
-        status: 500,
-      }
+          error:
+            error instanceof Error
+              ? error.message
+              : "Produkt konnte nicht aktualisiert werden.",
+        },
+        {
+          status: 500,
+        }
+      )
     );
   }
 };
@@ -274,6 +318,7 @@ export const loader = async () => {
   return Response.json(
     {
       success: false,
+
       error:
         "Diese Schnittstelle erwartet eine POST-Anfrage.",
     },

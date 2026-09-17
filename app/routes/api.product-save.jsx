@@ -1,22 +1,5 @@
 import db from "../db.server";
-
-/*
- * =========================================================
- * ENTWICKLUNGSEINSTELLUNGEN
- * =========================================================
- *
- * Diese beiden Werte sind nur vorübergehend.
- *
- * Später:
- * - customerId kommt aus dem eingeloggten Shopify-Kunden
- * - productLimit kommt aus dessen Subscription
- */
-
-const DEVELOPMENT_CUSTOMER_ID =
-  "development-test-customer";
-
-const DEVELOPMENT_PRODUCT_LIMIT = 100;
-
+import { authenticate } from "../shopify.server";
 
 /*
  * =========================================================
@@ -26,27 +9,15 @@ const DEVELOPMENT_PRODUCT_LIMIT = 100;
 
 function normalizeSourceUrl(value) {
   try {
-    const url = new URL(
-      String(value).trim()
-    );
+    const url = new URL(String(value).trim());
 
-    if (
-      !["http:", "https:"].includes(
-        url.protocol
-      )
-    ) {
+    if (!["http:", "https:"].includes(url.protocol)) {
       return null;
     }
 
-    /*
-     * Hash entfernen.
-     *
-     * Beispiel:
-     * /produkt#beschreibung
-     *
-     * ist dasselbe Produkt wie:
-     * /produkt
-     */
+    // Hash entfernen, damit z. B.
+    // /produkt und /produkt#beschreibung
+    // als dasselbe Produkt erkannt werden.
     url.hash = "";
 
     return url.href;
@@ -71,21 +42,14 @@ function prepareImages(images) {
   const seen = new Set();
 
   for (const image of images) {
-    if (
-      !image ||
-      typeof image !== "string"
-    ) {
+    if (!image || typeof image !== "string") {
       continue;
     }
 
     try {
       const url = new URL(image);
 
-      if (
-        !["http:", "https:"].includes(
-          url.protocol
-        )
-      ) {
+      if (!["http:", "https:"].includes(url.protocol)) {
         continue;
       }
 
@@ -96,11 +60,12 @@ function prepareImages(images) {
       seen.add(url.href);
       result.push(url.href);
 
+      // Maximal 10 Produktbilder übernehmen.
       if (result.length >= 10) {
         break;
       }
     } catch {
-      // Ungültiges Bild ignorieren
+      // Ungültige Bild-URL ignorieren.
     }
   }
 
@@ -118,10 +83,49 @@ function prepareImages(images) {
  * =========================================================
  */
 
-export const action = async ({
-  request,
-}) => {
+export const action = async ({ request }) => {
+  let cors = (response) => response;
+
   try {
+    /*
+     * =====================================================
+     * SHOPIFY-KUNDEN AUTHENTIFIZIEREN
+     * =====================================================
+     */
+
+    const authentication =
+      await authenticate.public.customerAccount(request);
+
+    cors = authentication.cors;
+
+    const sessionToken =
+      authentication.sessionToken;
+
+    const customerId =
+      sessionToken?.sub ?? null;
+
+    if (!customerId) {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Kunden-ID konnte nicht ermittelt werden.",
+          },
+          {
+            status: 401,
+          }
+        )
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * REQUEST-DATEN LADEN
+     * =====================================================
+     */
+
     const body =
       await request.json();
 
@@ -136,15 +140,17 @@ export const action = async ({
      */
 
     if (!product) {
-      return Response.json(
-        {
-          success: false,
-          error:
-            "Keine Produktdaten übermittelt.",
-        },
-        {
-          status: 400,
-        }
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Keine Produktdaten übermittelt.",
+          },
+          {
+            status: 400,
+          }
+        )
       );
     }
 
@@ -155,21 +161,21 @@ export const action = async ({
 
     const title =
       product.title
-        ? String(
-            product.title
-          ).trim()
+        ? String(product.title).trim()
         : "";
 
     if (!title) {
-      return Response.json(
-        {
-          success: false,
-          error:
-            "Produkttitel fehlt.",
-        },
-        {
-          status: 400,
-        }
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Produkttitel fehlt.",
+          },
+          {
+            status: 400,
+          }
+        )
       );
     }
 
@@ -184,51 +190,84 @@ export const action = async ({
       );
 
     if (!sourceUrl) {
-      return Response.json(
-        {
-          success: false,
-          error:
-            "Die Original-Produkt-URL ist ungültig.",
-        },
-        {
-          status: 400,
-        }
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Die Original-Produkt-URL ist ungültig.",
+          },
+          {
+            status: 400,
+          }
+        )
       );
     }
 
 
     /*
      * =====================================================
-     * KUNDE
+     * MARKTBLATT-PAKET DES KUNDEN LADEN
      * =====================================================
-     *
-     * VORÜBERGEHEND:
-     *
-     * Später ersetzen wir dies durch die
-     * echte Shopify Customer ID.
      */
 
-    const customerId =
-      DEVELOPMENT_CUSTOMER_ID;
+    const subscription =
+      await db.subscription.findUnique({
+        where: {
+          customerId,
+        },
+      });
 
-    const customerEmail =
-      null;
+    if (!subscription) {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Für diesen Kunden wurde noch kein Marktblatt-Paket gefunden.",
+          },
+          {
+            status: 403,
+          }
+        )
+      );
+    }
 
-
-    /*
-     * =====================================================
-     * PAKETLIMIT
-     * =====================================================
-     *
-     * VORÜBERGEHEND:
-     *
-     * Später kommt dieser Wert aus:
-     *
-     * db.subscription
-     */
+    if (subscription.status !== "active") {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Das Marktblatt-Paket dieses Kunden ist nicht aktiv.",
+          },
+          {
+            status: 403,
+          }
+        )
+      );
+    }
 
     const productLimit =
-      DEVELOPMENT_PRODUCT_LIMIT;
+      subscription.productLimit;
+
+    if (
+      !Number.isInteger(productLimit) ||
+      productLimit < 1
+    ) {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Für dieses Paket ist kein gültiges Produktlimit hinterlegt.",
+          },
+          {
+            status: 403,
+          }
+        )
+      );
+    }
 
 
     /*
@@ -255,20 +294,23 @@ export const action = async ({
      * =====================================================
      */
 
-    if (
-      usedProducts >=
-      productLimit
-    ) {
-      return Response.json(
-        {
-          success: false,
+    if (usedProducts >= productLimit) {
+      return cors(
+        Response.json(
+          {
+            success: false,
 
-          error:
-            `Ihr Produktlimit von ${productLimit} Produkten ist erreicht.`,
-        },
-        {
-          status: 403,
-        }
+            error:
+              `Ihr Produktlimit von ${productLimit} Produkten ist erreicht.`,
+
+            productLimit,
+            usedProducts,
+            availableProducts: 0,
+          },
+          {
+            status: 403,
+          }
+        )
       );
     }
 
@@ -291,21 +333,22 @@ export const action = async ({
         },
       });
 
-
     if (existingProduct) {
-      return Response.json(
-        {
-          success: false,
+      return cors(
+        Response.json(
+          {
+            success: false,
 
-          error:
-            "Dieses Produkt wurde bereits übernommen.",
+            error:
+              "Dieses Produkt wurde bereits übernommen.",
 
-          existingProductId:
-            existingProduct.id,
-        },
-        {
-          status: 409,
-        }
+            existingProductId:
+              existingProduct.id,
+          },
+          {
+            status: 409,
+          }
+        )
       );
     }
 
@@ -323,17 +366,14 @@ export const action = async ({
           ).trim()
         : null;
 
-
     const price =
-      product.price !==
-        undefined &&
+      product.price !== undefined &&
       product.price !== null &&
       product.price !== ""
         ? String(
             product.price
           ).trim()
         : null;
-
 
     const currency =
       product.currency
@@ -344,7 +384,6 @@ export const action = async ({
             .toUpperCase()
         : null;
 
-
     const vendor =
       product.vendor
         ? String(
@@ -352,14 +391,12 @@ export const action = async ({
           ).trim()
         : null;
 
-
     const brand =
       product.brand
         ? String(
             product.brand
           ).trim()
         : null;
-
 
     const images =
       prepareImages(
@@ -369,24 +406,26 @@ export const action = async ({
 
     /*
      * =====================================================
-     * PRODUKT IN MARKTBLATT-DATENBANK SPEICHERN
+     * PRODUKT SPEICHERN
      * =====================================================
      *
-     * shopifyProductId
-     * shopifyVariantId
-     * shopifyHandle
+     * Das Produkt wird zunächst als "draft" in unserer
+     * Datenbank gespeichert.
      *
-     * bleiben zunächst NULL.
-     *
-     * Sie werden gesetzt, sobald das Produkt
-     * tatsächlich in Shopify erzeugt wurde.
+     * Die Shopify-IDs werden später beim Veröffentlichen
+     * gesetzt.
      */
 
     const savedProduct =
       await db.marketplaceProduct.create({
         data: {
           customerId,
-          customerEmail,
+
+          /*
+           * Die E-Mail-Adresse wird später separat aus den
+           * verfügbaren Kundendaten übernommen.
+           */
+          customerEmail: null,
 
           title,
           description,
@@ -400,21 +439,11 @@ export const action = async ({
           sourceUrl,
           images,
 
-          /*
-           * Produkt wurde übernommen,
-           * aber noch nicht in Shopify
-           * veröffentlicht.
-           */
           status: "draft",
 
-          shopifyProductId:
-            null,
-
-          shopifyVariantId:
-            null,
-
-          shopifyHandle:
-            null,
+          shopifyProductId: null,
+          shopifyVariantId: null,
+          shopifyHandle: null,
         },
       });
 
@@ -430,8 +459,7 @@ export const action = async ({
 
     const availableProducts =
       Math.max(
-        productLimit -
-          newUsedProducts,
+        productLimit - newUsedProducts,
         0
       );
 
@@ -442,67 +470,74 @@ export const action = async ({
      * =====================================================
      */
 
-    return Response.json({
-      success: true,
+    return cors(
+      Response.json({
+        success: true,
 
-      message:
-        "Produkt wurde erfolgreich in Marktblatt übernommen.",
+        message:
+          "Produkt wurde erfolgreich in Marktblatt übernommen.",
 
-      product: {
-        id:
-          savedProduct.id,
+        product: {
+          id:
+            savedProduct.id,
 
-        title:
-          savedProduct.title,
+          title:
+            savedProduct.title,
 
-        description:
-          savedProduct.description,
+          description:
+            savedProduct.description,
 
-        price:
-          savedProduct.price,
+          price:
+            savedProduct.price,
 
-        currency:
-          savedProduct.currency,
+          currency:
+            savedProduct.currency,
 
-        vendor:
-          savedProduct.vendor,
+          vendor:
+            savedProduct.vendor,
 
-        brand:
-          savedProduct.brand,
+          brand:
+            savedProduct.brand,
 
-        sourceUrl:
-          savedProduct.sourceUrl,
+          sourceUrl:
+            savedProduct.sourceUrl,
 
-        images:
-          savedProduct.images
-            ? JSON.parse(
-                savedProduct.images
-              )
-            : [],
+          images:
+            savedProduct.images
+              ? JSON.parse(
+                  savedProduct.images
+                )
+              : [],
 
-        status:
-          savedProduct.status,
+          status:
+            savedProduct.status,
 
-        shopifyProductId:
-          savedProduct.shopifyProductId,
+          shopifyProductId:
+            savedProduct.shopifyProductId,
 
-        shopifyVariantId:
-          savedProduct.shopifyVariantId,
+          shopifyVariantId:
+            savedProduct.shopifyVariantId,
 
-        shopifyHandle:
-          savedProduct.shopifyHandle,
+          shopifyHandle:
+            savedProduct.shopifyHandle,
 
-        createdAt:
-          savedProduct.createdAt,
-      },
+          createdAt:
+            savedProduct.createdAt,
+        },
 
-      package: {
-        productLimit,
-        usedProducts:
-          newUsedProducts,
-        availableProducts,
-      },
-    });
+        package: {
+          package:
+            subscription.package,
+
+          productLimit,
+
+          usedProducts:
+            newUsedProducts,
+
+          availableProducts,
+        },
+      })
+    );
 
   } catch (error) {
     console.error(
@@ -510,18 +545,20 @@ export const action = async ({
       error
     );
 
-    return Response.json(
-      {
-        success: false,
+    return cors(
+      Response.json(
+        {
+          success: false,
 
-        error:
-          error instanceof Error
-            ? error.message
-            : "Produkt konnte nicht gespeichert werden.",
-      },
-      {
-        status: 500,
-      }
+          error:
+            error instanceof Error
+              ? error.message
+              : "Produkt konnte nicht gespeichert werden.",
+        },
+        {
+          status: 500,
+        }
+      )
     );
   }
 };
@@ -529,7 +566,7 @@ export const action = async ({
 
 /*
  * =========================================================
- * GET-AUFRUF
+ * GET NICHT ERLAUBT
  * =========================================================
  */
 

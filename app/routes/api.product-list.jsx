@@ -1,17 +1,5 @@
 import db from "../db.server";
-
-/*
- * =========================================================
- * ENTWICKLUNGSEINSTELLUNGEN
- * =========================================================
- *
- * Später wird diese ID durch die echte
- * Shopify Customer ID ersetzt.
- */
-
-const DEVELOPMENT_CUSTOMER_ID =
-  "development-test-customer";
-
+import { authenticate } from "../shopify.server";
 
 /*
  * =========================================================
@@ -42,13 +30,61 @@ function parseImages(value) {
  * =========================================================
  */
 
-export const loader = async () => {
+export const loader = async ({ request }) => {
+  let cors = (response) => response;
+
   try {
+    /*
+     * =====================================================
+     * SHOPIFY-KUNDEN AUTHENTIFIZIEREN
+     * =====================================================
+     */
+
+    const authentication =
+      await authenticate.public.customerAccount(request);
+
+    cors = authentication.cors;
+
+    const sessionToken =
+      authentication.sessionToken;
+
     const customerId =
-      DEVELOPMENT_CUSTOMER_ID;
+      sessionToken?.sub ?? null;
+
+    if (!customerId) {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Kunden-ID konnte nicht ermittelt werden.",
+          },
+          {
+            status: 401,
+          }
+        )
+      );
+    }
+
 
     /*
-     * Alle Produkte dieses Anbieters laden.
+     * =====================================================
+     * MARKTBLATT-PAKET LADEN
+     * =====================================================
+     */
+
+    const subscription =
+      await db.subscription.findUnique({
+        where: {
+          customerId,
+        },
+      });
+
+
+    /*
+     * =====================================================
+     * PRODUKTE DES KUNDEN LADEN
+     * =====================================================
      *
      * Gelöschte Produkte werden nicht angezeigt.
      */
@@ -70,81 +106,114 @@ export const loader = async () => {
 
 
     /*
-     * Daten für die Customer-Account-Extension
-     * vorbereiten.
+     * =====================================================
+     * PRODUKTDATEN VORBEREITEN
+     * =====================================================
      */
 
     const formattedProducts =
-      products.map((product) => ({
-        id:
-          product.id,
-
-        title:
-          product.title,
-
-        description:
-          product.description,
-
-        price:
-          product.price,
-
-        currency:
-          product.currency,
-
-        vendor:
-          product.vendor,
-
-        brand:
-          product.brand,
-
-        sourceUrl:
-          product.sourceUrl,
-
-        images:
+      products.map((product) => {
+        const images =
           parseImages(
             product.images
-          ),
+          );
 
-        /*
-         * Erstes Bild zusätzlich direkt
-         * bereitstellen.
-         */
+        return {
+          id:
+            product.id,
 
-        image:
-          parseImages(
-            product.images
-          )[0] || null,
+          title:
+            product.title,
 
-        status:
-          product.status,
+          description:
+            product.description,
 
-        shopifyProductId:
-          product.shopifyProductId,
+          price:
+            product.price,
 
-        shopifyVariantId:
-          product.shopifyVariantId,
+          currency:
+            product.currency,
 
-        shopifyHandle:
-          product.shopifyHandle,
+          vendor:
+            product.vendor,
 
-        createdAt:
-          product.createdAt,
+          brand:
+            product.brand,
 
-        updatedAt:
-          product.updatedAt,
-      }));
+          sourceUrl:
+            product.sourceUrl,
+
+          images,
+
+          image:
+            images[0] || null,
+
+          status:
+            product.status,
+
+          shopifyProductId:
+            product.shopifyProductId,
+
+          shopifyVariantId:
+            product.shopifyVariantId,
+
+          shopifyHandle:
+            product.shopifyHandle,
+
+          createdAt:
+            product.createdAt,
+
+          updatedAt:
+            product.updatedAt,
+        };
+      });
 
 
     /*
-     * Paketbelegung berechnen.
-     *
-     * Noch vorübergehend Business = 100.
+     * =====================================================
+     * PAKETBELEGUNG
+     * =====================================================
      */
-
-    const productLimit = 100;
 
     const usedProducts =
       formattedProducts.length;
+
+    /*
+     * Kunde hat noch kein Paket.
+     */
+
+    if (!subscription) {
+      return cors(
+        Response.json({
+          success: true,
+
+          products:
+            formattedProducts,
+
+          productCount:
+            formattedProducts.length,
+
+          hasSubscription:
+            false,
+
+          package: {
+            name: null,
+
+            status: null,
+
+            productLimit: 0,
+
+            usedProducts,
+
+            availableProducts: 0,
+          },
+        })
+      );
+    }
+
+
+    const productLimit =
+      subscription.productLimit;
 
     const availableProducts =
       Math.max(
@@ -154,26 +223,46 @@ export const loader = async () => {
       );
 
 
-    return Response.json({
-      success: true,
+    /*
+     * =====================================================
+     * ERFOLGREICHE ANTWORT
+     * =====================================================
+     */
 
-      products:
-        formattedProducts,
+    return cors(
+      Response.json({
+        success: true,
 
-      productCount:
-        formattedProducts.length,
+        products:
+          formattedProducts,
 
-      package: {
-        name:
-          "Business",
+        productCount:
+          formattedProducts.length,
 
-        productLimit,
+        hasSubscription:
+          true,
 
-        usedProducts,
+        package: {
+          name:
+            subscription.package,
 
-        availableProducts,
-      },
-    });
+          status:
+            subscription.status,
+
+          productLimit,
+
+          usedProducts,
+
+          availableProducts,
+
+          currentPeriodStart:
+            subscription.currentPeriodStart,
+
+          currentPeriodEnd:
+            subscription.currentPeriodEnd,
+        },
+      })
+    );
 
   } catch (error) {
     console.error(
@@ -181,18 +270,20 @@ export const loader = async () => {
       error
     );
 
-    return Response.json(
-      {
-        success: false,
+    return cors(
+      Response.json(
+        {
+          success: false,
 
-        error:
-          error instanceof Error
-            ? error.message
-            : "Produkte konnten nicht geladen werden.",
-      },
-      {
-        status: 500,
-      }
+          error:
+            error instanceof Error
+              ? error.message
+              : "Produkte konnten nicht geladen werden.",
+        },
+        {
+          status: 500,
+        }
+      )
     );
   }
 };
