@@ -1,0 +1,15 @@
+api_version = "2026-07"
+
+[[extensions]]
+name = "Meine Produkte"
+handle = "meine-produkte"
+type = "ui_extension"
+uid = "c83393af-1bfd-1047-1734-dc0406d965c4b407841e"
+
+[[extensions.targeting]]
+module = "./src/MeineProdukte.jsx"
+target = "customer-account.page.render"
+
+[extensions.capabilities]
+api_access = true
+network_access = true

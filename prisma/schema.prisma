@@ -1,0 +1,181 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+
+/*
+ * =========================================================
+ * SHOPIFY SESSION
+ * =========================================================
+ */
+
+model Session {
+  id            String   @id
+  shop          String
+  state         String
+  isOnline      Boolean  @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean  @default(false)
+  locale        String?
+  collaborator  Boolean? @default(false)
+  emailVerified Boolean? @default(false)
+
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+
+/*
+ * =========================================================
+ * MARKTBLATT PAKETE / ABONNEMENTS
+ * =========================================================
+ */
+
+model Subscription {
+  id String @id @default(cuid())
+
+  // Shopify-Kunde
+  customerId    String @unique
+  customerEmail String?
+
+  // Aktuelles Marktblatt-Paket
+  package      String
+  productLimit Int
+
+  // Abo-Status
+  status String @default("active")
+
+  // Stripe-Daten
+  stripeCustomerId     String?
+  stripeSubscriptionId String? @unique
+
+  // Laufzeit
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+
+  // Verwaltung
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+
+/*
+ * =========================================================
+ * MARKTBLATT PRODUKTE
+ * =========================================================
+ */
+
+model MarketplaceProduct {
+  id String @id @default(cuid())
+
+  /*
+   * Eigentümer / Anbieter
+   */
+
+  customerId    String
+  customerEmail String?
+
+
+  /*
+   * Produktdaten
+   */
+
+  title       String
+  description String?
+
+  price    String?
+  currency String?
+
+  vendor String?
+  brand  String?
+
+
+  /*
+   * Ursprüngliche Produktseite beim Anbieter
+   */
+
+  sourceUrl String
+
+
+  /*
+   * Produktbilder
+   *
+   * Werden zunächst als JSON-String gespeichert.
+   */
+
+  images String?
+
+
+  /*
+   * Marktblatt-Status
+   *
+   * Mögliche Werte:
+   *
+   * active
+   * inactive
+   * draft
+   * deleted
+   */
+
+  status String @default("active")
+
+
+  /*
+   * =======================================================
+   * SHOPIFY VERKNÜPFUNG
+   * =======================================================
+   */
+
+  // Shopify Product GID
+  // Beispiel:
+  // gid://shopify/Product/123456789
+
+  shopifyProductId String? @unique
+
+
+  // Shopify Variant GID
+  // Beispiel:
+  // gid://shopify/ProductVariant/123456789
+
+  shopifyVariantId String? @unique
+
+
+  /*
+   * Shopify Handle
+   *
+   * Beispiel:
+   * armband-18k-gold-charm-bambus
+   */
+
+  shopifyHandle String?
+
+
+  /*
+   * =======================================================
+   * VERWALTUNG
+   * =======================================================
+   */
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+
+  /*
+   * INDEXE
+   */
+
+  @@index([customerId])
+  @@index([status])
+  @@index([sourceUrl])
+}
