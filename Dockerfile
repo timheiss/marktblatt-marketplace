@@ -1,18 +1,23 @@
 FROM node:20-alpine
+
 RUN apk add --no-cache openssl
 
-EXPOSE 3000
+RUN corepack enable
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-COPY package.json package-lock.json* ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-RUN npm ci --omit=dev && npm cache clean --force
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 
-RUN npm run build
+RUN pnpm prisma generate
 
-CMD ["npm", "run", "docker-start"]
+RUN pnpm run build
+
+EXPOSE 3000
+
+CMD ["pnpm", "run", "docker-start"]
