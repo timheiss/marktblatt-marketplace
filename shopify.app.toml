@@ -1,13 +1,12 @@
-# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+# Marktblatt Marketplace - Shopify App Configuration
 
 client_id = "10bf3bb36a80e2edf79e5b7bb92e551d"
 name = "Marktblatt Marketplace"
-application_url = "https://example.com"
+application_url = "https://marktblatt-marketplace.onrender.com"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
 
 [webhooks]
 api_version = "2026-10"
@@ -21,11 +20,14 @@ api_version = "2026-10"
   topics = [ "app/uninstalled" ]
 
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "write_products,write_metaobjects,write_metaobject_definitions"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://marktblatt-marketplace.onrender.com/auth/callback",
+  "https://marktblatt-marketplace.onrender.com/auth/shopify/callback",
+  "https://marktblatt-marketplace.onrender.com/api/auth/callback"
+]
 
 [product.metafields.app.demo_info]
 type = "single_line_text_field"
@@ -37,7 +39,7 @@ description = "Tracks products created by the Shopify app template for developme
 
 [metaobjects.app.example]
 name = "Example"
-description = "An example metaobject definition created by this template"
+description = "An example metaobject definition created by the app"
 
   [metaobjects.app.example.access]
   admin = "merchant_read_write"
