@@ -3,6 +3,19 @@ import { authenticate } from "../shopify.server";
 
 /*
  * =========================================================
+ * CORS
+ * =========================================================
+ */
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+};
+
+
+/*
+ * =========================================================
  * BILDER AUS DATENBANK LESEN
  * =========================================================
  */
@@ -31,9 +44,25 @@ function parseImages(value) {
  */
 
 export const loader = async ({ request }) => {
+
+  /*
+   * =======================================================
+   * CORS PREFLIGHT
+   * =======================================================
+   */
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
+  }
+
+
   let cors = (response) => response;
 
   try {
+
     /*
      * =====================================================
      * SHOPIFY-KUNDEN AUTHENTIFIZIEREN
@@ -51,6 +80,7 @@ export const loader = async ({ request }) => {
     const customerId =
       sessionToken?.sub ?? null;
 
+
     if (!customerId) {
       return cors(
         Response.json(
@@ -61,6 +91,7 @@ export const loader = async ({ request }) => {
           },
           {
             status: 401,
+            headers: corsHeaders,
           }
         )
       );
@@ -85,8 +116,6 @@ export const loader = async ({ request }) => {
      * =====================================================
      * PRODUKTE DES KUNDEN LADEN
      * =====================================================
-     *
-     * Gelöschte Produkte werden nicht angezeigt.
      */
 
     const products =
@@ -113,6 +142,7 @@ export const loader = async ({ request }) => {
 
     const formattedProducts =
       products.map((product) => {
+
         const images =
           parseImages(
             product.images
@@ -178,36 +208,42 @@ export const loader = async ({ request }) => {
     const usedProducts =
       formattedProducts.length;
 
+
     /*
-     * Kunde hat noch kein Paket.
+     * Kunde hat noch kein Paket
      */
 
     if (!subscription) {
       return cors(
-        Response.json({
-          success: true,
+        Response.json(
+          {
+            success: true,
 
-          products:
-            formattedProducts,
+            products:
+              formattedProducts,
 
-          productCount:
-            formattedProducts.length,
+            productCount:
+              formattedProducts.length,
 
-          hasSubscription:
-            false,
+            hasSubscription:
+              false,
 
-          package: {
-            name: null,
+            package: {
+              name: null,
 
-            status: null,
+              status: null,
 
-            productLimit: 0,
+              productLimit: 0,
 
-            usedProducts,
+              usedProducts,
 
-            availableProducts: 0,
+              availableProducts: 0,
+            },
           },
-        })
+          {
+            headers: corsHeaders,
+          }
+        )
       );
     }
 
@@ -230,41 +266,47 @@ export const loader = async ({ request }) => {
      */
 
     return cors(
-      Response.json({
-        success: true,
+      Response.json(
+        {
+          success: true,
 
-        products:
-          formattedProducts,
+          products:
+            formattedProducts,
 
-        productCount:
-          formattedProducts.length,
+          productCount:
+            formattedProducts.length,
 
-        hasSubscription:
-          true,
+          hasSubscription:
+            true,
 
-        package: {
-          name:
-            subscription.package,
+          package: {
+            name:
+              subscription.package,
 
-          status:
-            subscription.status,
+            status:
+              subscription.status,
 
-          productLimit,
+            productLimit,
 
-          usedProducts,
+            usedProducts,
 
-          availableProducts,
+            availableProducts,
 
-          currentPeriodStart:
-            subscription.currentPeriodStart,
+            currentPeriodStart:
+              subscription.currentPeriodStart,
 
-          currentPeriodEnd:
-            subscription.currentPeriodEnd,
+            currentPeriodEnd:
+              subscription.currentPeriodEnd,
+          },
         },
-      })
+        {
+          headers: corsHeaders,
+        }
+      )
     );
 
   } catch (error) {
+
     console.error(
       "PRODUCT LIST ERROR:",
       error
@@ -282,6 +324,7 @@ export const loader = async ({ request }) => {
         },
         {
           status: 500,
+          headers: corsHeaders,
         }
       )
     );
