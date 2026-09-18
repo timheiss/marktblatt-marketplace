@@ -991,21 +991,28 @@ export async function action({
  * =========================================================
  */
 
-export async function loader() {
+export async function loader({ request }) {
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
+  }
+
   return Response.json(
     {
       success: false,
-
-      error:
-        "Diese Schnittstelle erwartet eine POST-Anfrage.",
+      error: "Diese Schnittstelle erwartet eine POST-Anfrage.",
     },
     {
       status: 405,
-
-      headers: {
-        "Access-Control-Allow-Origin":
-          "*",
-      },
+      headers: corsHeaders,
     }
   );
 }
