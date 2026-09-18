@@ -566,11 +566,47 @@ export const action = async ({ request }) => {
 
 /*
  * =========================================================
- * GET NICHT ERLAUBT
+ * OPTIONS / GET
  * =========================================================
+ *
+ * Die Shopify Customer Account Extension läuft auf einer
+ * anderen Domain als unsere Render-API.
+ *
+ * Vor einem POST mit Authorization-Header sendet der
+ * Browser deshalb zunächst eine CORS-Preflight-Anfrage
+ * mit der Methode OPTIONS.
  */
 
-export const loader = async () => {
+export const loader = async ({ request }) => {
+  /*
+   * =======================================================
+   * CORS PREFLIGHT
+   * =======================================================
+   */
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+
+        "Access-Control-Allow-Methods":
+          "POST, OPTIONS",
+
+        "Access-Control-Allow-Headers":
+          "Authorization, Content-Type",
+      },
+    });
+  }
+
+
+  /*
+   * =======================================================
+   * GET NICHT ERLAUBT
+   * =======================================================
+   */
+
   return Response.json(
     {
       success: false,
@@ -580,6 +616,10 @@ export const loader = async () => {
     },
     {
       status: 405,
+
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+      },
     }
   );
 };
