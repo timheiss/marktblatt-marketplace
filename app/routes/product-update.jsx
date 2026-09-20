@@ -5,6 +5,15 @@ import { authenticate } from "../shopify.server";
  * =========================================================
  * PRODUKT AKTUALISIEREN
  * =========================================================
+ *
+ * Der Kunde darf bearbeiten:
+ *
+ * - Produkttitel
+ * - Produktbeschreibung
+ *
+ * Der Preis darf NICHT vom Kunden geändert werden.
+ * Er stammt ausschließlich aus der ursprünglichen
+ * Produktseite bzw. dem Marktblatt-Scraper.
  */
 
 export const action = async ({ request }) => {
@@ -48,6 +57,11 @@ export const action = async ({ request }) => {
      * =====================================================
      * REQUEST-DATEN LADEN
      * =====================================================
+     *
+     * WICHTIG:
+     *
+     * price wird absichtlich NICHT aus dem Request
+     * übernommen.
      */
 
     const body =
@@ -64,12 +78,6 @@ export const action = async ({ request }) => {
     const description =
       body?.description !== undefined
         ? String(body.description).trim()
-        : "";
-
-    const price =
-      body?.price !== undefined &&
-      body?.price !== null
-        ? String(body.price).trim()
         : "";
 
 
@@ -112,64 +120,13 @@ export const action = async ({ request }) => {
 
     /*
      * =====================================================
-     * PREIS PRÜFEN
-     * =====================================================
-     */
-
-    let normalizedPrice = null;
-
-    if (price !== "") {
-      let preparedPrice =
-        price.replace(/\s/g, "");
-
-      /*
-       * Deutsches Dezimaltrennzeichen unterstützen.
-       */
-
-      if (
-        preparedPrice.includes(",") &&
-        !preparedPrice.includes(".")
-      ) {
-        preparedPrice =
-          preparedPrice.replace(",", ".");
-      }
-
-      const priceNumber =
-        Number(preparedPrice);
-
-      if (
-        !Number.isFinite(priceNumber) ||
-        priceNumber < 0
-      ) {
-        return cors(
-          Response.json(
-            {
-              success: false,
-              error:
-                "Bitte geben Sie einen gültigen Preis ein.",
-            },
-            {
-              status: 400,
-            }
-          )
-        );
-      }
-
-      normalizedPrice =
-        priceNumber.toFixed(2);
-    }
-
-
-    /*
-     * =====================================================
      * PRODUKT SUCHEN
      * =====================================================
      *
-     * Produkt-ID UND echte Shopify Customer ID werden
-     * geprüft.
+     * Produkt-ID UND Shopify Customer ID werden geprüft.
      *
-     * Dadurch kann ein Anbieter niemals ein Produkt
-     * eines anderen Anbieters bearbeiten.
+     * Dadurch kann ein Anbieter kein Produkt eines
+     * anderen Anbieters bearbeiten.
      */
 
     const existingProduct =
@@ -206,6 +163,9 @@ export const action = async ({ request }) => {
      * =====================================================
      * PRODUKT AKTUALISIEREN
      * =====================================================
+     *
+     * Preis, Währung, Anbieter, Original-URL usw.
+     * bleiben unverändert.
      */
 
     const updatedProduct =
@@ -220,9 +180,6 @@ export const action = async ({ request }) => {
 
           description:
             description || null,
-
-          price:
-            normalizedPrice,
         },
       });
 
@@ -249,6 +206,11 @@ export const action = async ({ request }) => {
 
           description:
             updatedProduct.description,
+
+          /*
+           * Der unveränderte Originalpreis wird
+           * lediglich zurückgegeben.
+           */
 
           price:
             updatedProduct.price,
@@ -310,11 +272,41 @@ export const action = async ({ request }) => {
 
 /*
  * =========================================================
- * GET NICHT ERLAUBT
+ * OPTIONS / GET
  * =========================================================
  */
 
-export const loader = async () => {
+export const loader = async ({ request }) => {
+
+  /*
+   * =======================================================
+   * CORS PREFLIGHT
+   * =======================================================
+   */
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+
+        "Access-Control-Allow-Methods":
+          "POST, OPTIONS",
+
+        "Access-Control-Allow-Headers":
+          "Authorization, Content-Type",
+      },
+    });
+  }
+
+
+  /*
+   * =======================================================
+   * GET NICHT ERLAUBT
+   * =======================================================
+   */
+
   return Response.json(
     {
       success: false,
@@ -324,6 +316,10 @@ export const loader = async () => {
     },
     {
       status: 405,
+
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+      },
     }
   );
 };

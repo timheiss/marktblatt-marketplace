@@ -408,9 +408,9 @@ function cleanProductImages(
       result.push(url.href);
 
       /*
-       * Maximal 10 Produktbilder.
+       * Maximal 5 Produktbilder.
        */
-      if (result.length >= 10) {
+      if (result.length >= 5) {
         break;
       }
     } catch {
@@ -1180,7 +1180,7 @@ const htmlImages =
  * 3. Produktgalerie der Webseite
  *
  * Anschließend werden Duplikate entfernt
- * und maximal 10 Bilder verwendet.
+ * und maximal 5 Bilder verwendet.
  */
 
 const images =

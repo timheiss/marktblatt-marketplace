@@ -60,8 +60,8 @@ function prepareImages(images) {
       seen.add(url.href);
       result.push(url.href);
 
-      // Maximal 10 Produktbilder übernehmen.
-      if (result.length >= 10) {
+      // Maximal 5 Produktbilder übernehmen.
+      if (result.length >= 5) {
         break;
       }
     } catch {

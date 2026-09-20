@@ -86,9 +86,6 @@ function Extension() {
   const [editDescription, setEditDescription] =
     useState('');
 
-  const [editPrice, setEditPrice] =
-    useState('');
-
   const [savingEdit, setSavingEdit] =
     useState(false);
 
@@ -279,7 +276,34 @@ function Extension() {
       setChecking(false);
     }
   }
+/*
+ * =======================================================
+ * BILD AUS PRODUKTVORSCHAU ENTFERNEN
+ * =======================================================
+ */
 
+function removePreviewImage(imageIndex) {
+  setProductPreview((currentProduct) => {
+    if (!currentProduct) {
+      return currentProduct;
+    }
+
+    const currentImages =
+      Array.isArray(currentProduct.images)
+        ? currentProduct.images
+        : [];
+
+    return {
+      ...currentProduct,
+
+      images:
+        currentImages.filter(
+          (_, index) =>
+            index !== imageIndex
+        ),
+    };
+  });
+}
 
   /*
    * =======================================================
@@ -406,37 +430,8 @@ function Extension() {
           },
 
           body: JSON.stringify({
-            product: {
-              id:
-                product.id,
-
-              title:
-                product.title,
-
-              description:
-                product.description,
-
-              price:
-                product.price,
-
-              currency:
-                product.currency,
-
-              vendor:
-                product.vendor,
-
-              brand:
-                product.brand,
-
-              sourceUrl:
-                product.sourceUrl,
-
-              images:
-                Array.isArray(product.images)
-                  ? product.images
-                  : [],
-            },
-          }),
+  productId: product.id,
+}),
         }
       );
 
@@ -501,10 +496,6 @@ function Extension() {
       product.description || ''
     );
 
-    setEditPrice(
-      product.price || ''
-    );
-
     setError(null);
     setSaveMessage(null);
   }
@@ -520,7 +511,6 @@ function Extension() {
     setEditingProduct(null);
     setEditTitle('');
     setEditDescription('');
-    setEditPrice('');
   }
 
 
@@ -561,19 +551,16 @@ function Extension() {
             'Content-Type': 'application/json',
           },
 
-          body: JSON.stringify({
-            productId:
-              editingProduct.id,
+body: JSON.stringify({
+  productId:
+    editingProduct.id,
 
-            title:
-              editTitle,
+  title:
+    editTitle,
 
-            description:
-              editDescription,
-
-            price:
-              editPrice,
-          }),
+  description:
+    editDescription,
+}),
         }
       );
 
@@ -841,18 +828,14 @@ function Extension() {
               Onlineshop ein.
             </s-text>
 
-            <s-text-field
-              label="Produkt-URL"
-              placeholder="https://www.ihr-shop.de/produkt/..."
-              type="url"
-              value={productUrl}
-
-              onInput={(event) => {
-                setProductUrl(
-                  event.currentTarget.value
-                );
-              }}
-            />
+<s-text>
+  Preis:{' '}
+  {editingProduct.price
+    ? `${editingProduct.price} ${
+        editingProduct.currency || ''
+      }`
+    : 'Kein Preis vorhanden'}
+</s-text>
 
             <s-button
               variant="primary"
@@ -886,17 +869,44 @@ function Extension() {
               gap="base"
             >
 
-              {productPreview.images?.[0] && (
-                <s-image
-                  src={
-                    productPreview.images[0]
-                  }
-                  alt={
-                    productPreview.title ||
-                    'Produktbild'
-                  }
-                />
-              )}
+{productPreview.images?.length > 0 ? (
+  <s-stack
+    direction="block"
+    gap="base"
+  >
+    <s-text>
+      Produktbilder: {productPreview.images.length} von maximal 5
+    </s-text>
+
+    {productPreview.images
+      .slice(0, 5)
+      .map((image, index) => (
+        <s-stack
+          key={`${image}-${index}`}
+          direction="block"
+          gap="small"
+        >
+          <s-image
+            src={image}
+            alt={`${productPreview.title || 'Produktbild'} ${index + 1}`}
+          />
+
+          <s-button
+            variant="secondary"
+            onClick={() =>
+              removePreviewImage(index)
+            }
+          >
+            Bild entfernen
+          </s-button>
+        </s-stack>
+      ))}
+  </s-stack>
+) : (
+  <s-text>
+    Keine Produktbilder vorhanden.
+  </s-text>
+)}
 
               <s-text>
                 {productPreview.title}

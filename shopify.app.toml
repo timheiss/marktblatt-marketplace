@@ -20,7 +20,7 @@ api_version = "2026-10"
   topics = [ "app/uninstalled" ]
 
 [access_scopes]
-scopes = "write_products,write_metaobjects,write_metaobject_definitions"
+scopes = "write_products,write_metaobjects,write_metaobject_definitions,read_orders,read_customers"
 
 [auth]
 redirect_urls = [

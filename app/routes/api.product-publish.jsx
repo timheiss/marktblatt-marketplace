@@ -133,7 +133,7 @@ function prepareMedia(product) {
           "Produktbild",
       });
 
-      if (media.length >= 10) {
+      if (media.length >= 5) {
         break;
       }
     } catch {
@@ -510,7 +510,7 @@ export const action = async ({ request }) => {
                   }
                 }
 
-                media(first: 10) {
+                media(first: 5) {
                   nodes {
                     id
                     alt
