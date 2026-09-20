@@ -424,6 +424,374 @@ function cleanProductImages(
   return result;
 }
 
+/*
+ * =========================================================
+ * PRODUKTBILDER AUS HTML-GALERIE AUSLESEN
+ * =========================================================
+ *
+ * Ergänzt JSON-LD und OpenGraph.
+ *
+ * Es werden bevorzugt Bilder aus typischen Produktgalerien
+ * gesucht. Logos, Icons, Avatare, Zahlungsbilder usw.
+ * werden soweit möglich ausgeschlossen.
+ */
+
+function getImagesFromHtml($, pageUrl) {
+  const images = [];
+
+  /*
+   * Bild hinzufügen
+   */
+
+  const addImage = (value) => {
+    if (
+      !value ||
+      typeof value !== "string"
+    ) {
+      return;
+    }
+
+    const cleaned =
+      value.trim();
+
+    if (
+      !cleaned ||
+      cleaned.startsWith("data:") ||
+      cleaned.startsWith("blob:")
+    ) {
+      return;
+    }
+
+    const absolute =
+      absoluteUrl(
+        cleaned,
+        pageUrl
+      );
+
+    if (!absolute) {
+      return;
+    }
+
+    /*
+     * Typische Nicht-Produktbilder ausschließen.
+     */
+
+    const lower =
+      absolute.toLowerCase();
+
+    const blockedWords = [
+      "logo",
+      "icon",
+      "favicon",
+      "avatar",
+      "payment",
+      "paypal",
+      "klarna",
+      "visa",
+      "mastercard",
+      "amex",
+      "apple-pay",
+      "google-pay",
+      "trust",
+      "badge",
+      "rating",
+      "stars",
+      "sprite",
+      "placeholder",
+    ];
+
+    if (
+      blockedWords.some(
+        (word) =>
+          lower.includes(word)
+      )
+    ) {
+      return;
+    }
+
+    images.push(absolute);
+  };
+
+
+  /*
+   * SRCSET AUSWERTEN
+   *
+   * Wenn mehrere Auflösungen vorhanden sind,
+   * verwenden wir bevorzugt die größte.
+   */
+
+  const addSrcset = (value) => {
+    if (
+      !value ||
+      typeof value !== "string"
+    ) {
+      return;
+    }
+
+    const candidates =
+      value
+        .split(",")
+        .map((entry) => {
+          const parts =
+            entry
+              .trim()
+              .split(/\s+/);
+
+          const url =
+            parts[0];
+
+          const descriptor =
+            parts[1] || "";
+
+          let size = 0;
+
+          if (
+            descriptor.endsWith("w")
+          ) {
+            size =
+              Number(
+                descriptor.slice(0, -1)
+              ) || 0;
+          }
+
+          if (
+            descriptor.endsWith("x")
+          ) {
+            size =
+              (
+                Number(
+                  descriptor.slice(0, -1)
+                ) || 0
+              ) * 1000;
+          }
+
+          return {
+            url,
+            size,
+          };
+        })
+        .filter(
+          (item) =>
+            item.url
+        )
+        .sort(
+          (a, b) =>
+            b.size - a.size
+        );
+
+    if (candidates[0]?.url) {
+      addImage(
+        candidates[0].url
+      );
+    }
+  };
+
+
+  /*
+   * Typische Produktgalerien verschiedener
+   * Shopsysteme.
+   */
+
+  const gallerySelectors = [
+    /*
+     * Allgemein
+     */
+    '[class*="product"] [class*="gallery"] img',
+    '[class*="product"] [class*="media"] img',
+    '[class*="product"] [class*="image"] img',
+    '[class*="product"] [class*="slider"] img',
+    '[class*="product"] [class*="carousel"] img',
+    '[class*="product"] [class*="thumbnail"] img',
+
+    '[id*="product"] [class*="gallery"] img',
+    '[id*="product"] [class*="media"] img',
+    '[id*="product"] [class*="image"] img',
+
+    /*
+     * Shopify
+     */
+    '.product__media img',
+    '.product-media img',
+    '.product__media-list img',
+    '.product__media-item img',
+    '[data-product-media] img',
+    '[data-product-media-type] img',
+
+    /*
+     * WooCommerce
+     */
+    '.woocommerce-product-gallery img',
+    '.woocommerce-product-gallery__image img',
+    '.flex-control-thumbs img',
+
+    /*
+     * Weitere häufige Galeriebezeichnungen
+     */
+    '.product-gallery img',
+    '.product-images img',
+    '.product-image img',
+    '.product-slider img',
+    '.product-carousel img',
+    '.product-thumbnails img',
+    '.product-detail img',
+  ];
+
+
+  /*
+   * Zuerst gezielt Produktgalerien durchsuchen.
+   */
+
+  for (
+    const selector of gallerySelectors
+  ) {
+    $(selector).each(
+      (_, element) => {
+        const image =
+          $(element);
+
+        /*
+         * Lazy-Loading Varianten
+         */
+
+        addImage(
+          image.attr("data-zoom-image")
+        );
+
+        addImage(
+          image.attr("data-large_image")
+        );
+
+        addImage(
+          image.attr("data-large-image")
+        );
+
+        addImage(
+          image.attr("data-original")
+        );
+
+        addImage(
+          image.attr("data-src")
+        );
+
+        addImage(
+          image.attr("data-lazy-src")
+        );
+
+        addImage(
+          image.attr("data-lazy")
+        );
+
+        /*
+         * Responsive Bilder
+         */
+
+        addSrcset(
+          image.attr("srcset")
+        );
+
+        addSrcset(
+          image.attr("data-srcset")
+        );
+
+        /*
+         * Normales Bild
+         */
+
+        addImage(
+          image.attr("src")
+        );
+      }
+    );
+  }
+
+
+  /*
+   * Links auf hochauflösende Produktbilder.
+   *
+   * Manche Galerien verwenden im <a>-Element
+   * das große Bild und im <img> nur das Thumbnail.
+   */
+
+  const galleryLinkSelectors = [
+    '.woocommerce-product-gallery a',
+    '.product-gallery a',
+    '.product-images a',
+    '.product__media a',
+    '[class*="product"] [class*="gallery"] a',
+  ];
+
+  for (
+    const selector of galleryLinkSelectors
+  ) {
+    $(selector).each(
+      (_, element) => {
+        addImage(
+          $(element).attr("href")
+        );
+      }
+    );
+  }
+
+
+  /*
+   * Als zusätzliche Absicherung:
+   * Bilder mit product-bezogenen Attributen.
+   */
+
+  $("img").each(
+    (_, element) => {
+      const image =
+        $(element);
+
+      const context = [
+        image.attr("class"),
+        image.attr("id"),
+        image.attr("alt"),
+        image.attr("data-media-id"),
+        image.parent().attr("class"),
+        image.parent().attr("id"),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      if (
+        !context.includes("product") &&
+        !context.includes("gallery") &&
+        !context.includes("media")
+      ) {
+        return;
+      }
+
+      addImage(
+        image.attr("data-zoom-image")
+      );
+
+      addImage(
+        image.attr("data-large_image")
+      );
+
+      addImage(
+        image.attr("data-src")
+      );
+
+      addSrcset(
+        image.attr("srcset")
+      );
+
+      addSrcset(
+        image.attr("data-srcset")
+      );
+
+      addImage(
+        image.attr("src")
+      );
+    }
+  );
+
+
+  return images;
+}
 
 /*
  * =========================================================
@@ -788,17 +1156,42 @@ function extractProduct(
   );
 
   /*
-   * BILDER BEREINIGEN
-   */
+ * =========================================================
+ * BILDER AUS HTML-PRODUKTGALERIE
+ * =========================================================
+ */
 
-  const images =
-    cleanProductImages(
-      [
-        ...jsonImages,
-        ...metaImages,
-      ],
-      pageUrl
-    );
+const htmlImages =
+  getImagesFromHtml(
+    $,
+    pageUrl
+  );
+
+
+/*
+ * =========================================================
+ * ALLE PRODUKTBILDER ZUSAMMENFÜHREN
+ * =========================================================
+ *
+ * Reihenfolge:
+ *
+ * 1. JSON-LD
+ * 2. OpenGraph / Meta
+ * 3. Produktgalerie der Webseite
+ *
+ * Anschließend werden Duplikate entfernt
+ * und maximal 10 Bilder verwendet.
+ */
+
+const images =
+  cleanProductImages(
+    [
+      ...jsonImages,
+      ...metaImages,
+      ...htmlImages,
+    ],
+    pageUrl
+  );
 
   /*
    * MARKE
