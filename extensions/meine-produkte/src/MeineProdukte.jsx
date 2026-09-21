@@ -1,4 +1,4 @@
-import '@shopify/ui-extensions/preact';
+﻿import '@shopify/ui-extensions/preact';
 import {render} from 'preact';
 import {useEffect, useState} from 'preact/hooks';
 
@@ -69,28 +69,6 @@ function Extension() {
 
   const [saveMessage, setSaveMessage] =
     useState(null);
-
-
-  /*
-   * =======================================================
-   * PRODUKT BEARBEITEN
-   * =======================================================
-   */
-
-  const [editingProduct, setEditingProduct] =
-    useState(null);
-
-  const [editTitle, setEditTitle] =
-    useState('');
-
-  const [editDescription, setEditDescription] =
-    useState('');
-
-  const [editPrice, setEditPrice] =
-    useState('');
-
-  const [savingEdit, setSavingEdit] =
-    useState(false);
 
 
   /*
@@ -457,137 +435,7 @@ body: JSON.stringify({
 
   /*
    * =======================================================
-   * BEARBEITEN STARTEN
-   * =======================================================
-   */
-
-  function startEditing(product) {
-    setEditingProduct(product);
-
-    setEditTitle(
-      product.title || ''
-    );
-
-    setEditDescription(
-      product.description || ''
-    );
-
-    setEditPrice(
-      product.price || ''
-    );
-
-    setError(null);
-    setSaveMessage(null);
-  }
-
-
-  /*
-   * =======================================================
-   * BEARBEITEN ABBRECHEN
-   * =======================================================
-   */
-
-  function cancelEditing() {
-    setEditingProduct(null);
-    setEditTitle('');
-    setEditDescription('');
-    setEditPrice('');
-  }
-
-
-  /*
-   * =======================================================
-   * ÄNDERUNGEN SPEICHERN
-   * =======================================================
-   */
-
-  async function saveEditing() {
-    if (!editingProduct) {
-      return;
-    }
-
-    if (!editTitle.trim()) {
-      setError(
-        'Bitte geben Sie einen Produkttitel ein.'
-      );
-
-      return;
-    }
-
-    try {
-      setSavingEdit(true);
-      setError(null);
-      setSaveMessage(null);
-
-      const token =
-        await shopify.sessionToken.get();
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/product-update`,
-        {
-          method: 'POST',
-
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-
-          body: JSON.stringify({
-            productId:
-              editingProduct.id,
-
-            title:
-              editTitle,
-
-            description:
-              editDescription,
-
-            price:
-              editPrice,
-          }),
-        }
-      );
-
-      const data =
-        await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.error ||
-            'Änderungen konnten nicht gespeichert werden.'
-        );
-      }
-
-      setSaveMessage(
-        data.message ||
-          'Änderungen wurden erfolgreich gespeichert.'
-      );
-
-      cancelEditing();
-
-      await loadProducts();
-
-    } catch (err) {
-      console.error(
-        'PRODUCT UPDATE ERROR:',
-        err
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Änderungen konnten nicht gespeichert werden.'
-      );
-
-    } finally {
-      setSavingEdit(false);
-    }
-  }
-
-
-  /*
-   * =======================================================
-   * STATUS DAUERHAFT ÄNDERN
+   * STATUS DAUERHAFT Ã„NDERN
    * =======================================================
    */
 
@@ -720,12 +568,6 @@ body: JSON.stringify({
         );
       }
 
-      if (
-        editingProduct?.id === product.id
-      ) {
-        cancelEditing();
-      }
-
       setSaveMessage(
         data.message ||
           'Produkt wurde erfolgreich gelöscht.'
@@ -753,7 +595,7 @@ body: JSON.stringify({
 
   /*
    * =======================================================
-   * OBERFLÄCHE
+   * OBERFLÃ„CHE
    * =======================================================
    */
 
@@ -1037,9 +879,9 @@ body: JSON.stringify({
 
                 ) : (
 
-                  <s-stack
-                    direction="block"
-                    gap="large"
+                  <s-grid
+                    gridTemplateColumns="repeat(4, minmax(0, 1fr))"
+                    gap="base"
                   >
 
                     {marketplaceProducts.map(
@@ -1061,10 +903,6 @@ body: JSON.stringify({
                           Boolean(
                             product.shopifyProductId
                           );
-
-                        const isEditing =
-                          editingProduct?.id ===
-                          product.id;
 
                         return (
 
@@ -1093,7 +931,9 @@ body: JSON.stringify({
 
                                 {product.description && (
                                   <s-text>
-                                    {product.description}
+                                  {product.description.length > 120
+                                    ? `${product.description.slice(0, 120)}...`
+                                    : product.description}
                                   </s-text>
                                 )}
 
@@ -1135,20 +975,7 @@ body: JSON.stringify({
                                   gap="small"
                                 >
 
-                                  <s-button
-                                    onClick={() =>
-                                      startEditing(
-                                        product
-                                      )
-                                    }
-                                    disabled={
-                                      statusChanging ||
-                                      productDeleting ||
-                                      productPublishing
-                                    }
-                                  >
-                                    Bearbeiten
-                                  </s-button>
+
 
                                   <s-button
                                     onClick={() =>
@@ -1211,85 +1038,6 @@ body: JSON.stringify({
 
                                 </s-stack>
 
-                                {/* PRODUKT DIREKT HIER BEARBEITEN */}
-
-                                {isEditing && (
-
-                                  <s-section heading="Produkt bearbeiten">
-
-                                    <s-stack
-                                      direction="block"
-                                      gap="base"
-                                    >
-
-                                      <s-text>
-                                        Sie bearbeiten:{' '}
-                                        {editingProduct.title}
-                                      </s-text>
-
-                                      <s-text-field
-                                        label="Produkttitel"
-                                        value={editTitle}
-                                        onInput={(event) => {
-                                          setEditTitle(
-                                            event.currentTarget.value
-                                          );
-                                        }}
-                                      />
-
-                                      <s-text-field
-                                        label="Beschreibung"
-                                        value={editDescription}
-                                        onInput={(event) => {
-                                          setEditDescription(
-                                            event.currentTarget.value
-                                          );
-                                        }}
-                                      />
-
-                                      <s-text>
-                                        Preis:{' '}
-                                        {product.price
-                                          ? `${product.price} ${
-                                              product.currency ||
-                                              ''
-                                            }`
-                                          : 'Kein Preis vorhanden'}
-                                      </s-text>
-
-                                      <s-text>
-                                        Der Preis wird aus dem Onlineshop übernommen und kann hier nicht geändert werden.
-                                      </s-text>
-
-                                      <s-stack
-                                        direction="inline"
-                                        gap="small"
-                                      >
-
-                                        <s-button
-                                          variant="primary"
-                                          onClick={saveEditing}
-                                          disabled={savingEdit}
-                                        >
-                                          {savingEdit
-                                            ? 'Änderungen werden gespeichert...'
-                                            : 'Änderungen speichern'}
-                                        </s-button>
-
-                                        <s-button
-                                          onClick={cancelEditing}
-                                          disabled={savingEdit}
-                                        >
-                                          Abbrechen
-                                        </s-button>
-
-                                      </s-stack>
-
-                                    </s-stack>
-
-                                  </s-section>
-
-                                )}
 
                               </s-stack>
 
@@ -1301,7 +1049,7 @@ body: JSON.stringify({
                       }
                     )}
 
-                  </s-stack>
+                  </s-grid>
 
                 )}
 
@@ -1318,3 +1066,4 @@ body: JSON.stringify({
     </s-page>
   );
 }
+

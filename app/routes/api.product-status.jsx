@@ -245,7 +245,36 @@ export const action = async ({ request }) => {
  * =========================================================
  */
 
-export const loader = async () => {
+export const loader = async ({ request }) => {
+  /*
+   * =======================================================
+   * CORS PREFLIGHT
+   * =======================================================
+   */
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+
+        "Access-Control-Allow-Methods":
+          "POST, OPTIONS",
+
+        "Access-Control-Allow-Headers":
+          "Authorization, Content-Type",
+      },
+    });
+  }
+
+
+  /*
+   * =======================================================
+   * GET NICHT ERLAUBT
+   * =======================================================
+   */
+
   return Response.json(
     {
       success: false,
@@ -255,6 +284,10 @@ export const loader = async () => {
     },
     {
       status: 405,
+
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+      },
     }
   );
 };
