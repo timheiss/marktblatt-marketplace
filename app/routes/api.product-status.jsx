@@ -1,11 +1,27 @@
 import db from "../db.server";
-import { authenticate } from "../shopify.server";
+import {
+  authenticate,
+  unauthenticated,
+} from "../shopify.server";
+
 
 /*
  * =========================================================
  * PRODUKTSTATUS ÄNDERN
  * =========================================================
+ *
+ * active:
+ * - MarketplaceProduct.status = active
+ * - bereits übertragenes Shopify-Produkt = ACTIVE
+ *
+ * inactive:
+ * - MarketplaceProduct.status = inactive
+ * - bereits übertragenes Shopify-Produkt = DRAFT
+ *
+ * Noch nicht übertragene Produkte werden nur in der
+ * Marketplace-Datenbank aktiviert/deaktiviert.
  */
+
 
 export const action = async ({ request }) => {
   let cors = (response) => response;
@@ -13,12 +29,14 @@ export const action = async ({ request }) => {
   try {
     /*
      * =====================================================
-     * SHOPIFY-KUNDEN AUTHENTIFIZIEREN
+     * 1. SHOPIFY-KUNDEN AUTHENTIFIZIEREN
      * =====================================================
      */
 
     const authentication =
-      await authenticate.public.customerAccount(request);
+      await authenticate.public.customerAccount(
+        request
+      );
 
     cors = authentication.cors;
 
@@ -46,7 +64,7 @@ export const action = async ({ request }) => {
 
     /*
      * =====================================================
-     * REQUEST-DATEN LADEN
+     * 2. REQUEST-DATEN LADEN
      * =====================================================
      */
 
@@ -62,7 +80,7 @@ export const action = async ({ request }) => {
 
     /*
      * =====================================================
-     * PRODUKT-ID PRÜFEN
+     * 3. PRODUKT-ID PRÜFEN
      * =====================================================
      */
 
@@ -84,11 +102,8 @@ export const action = async ({ request }) => {
 
     /*
      * =====================================================
-     * STATUS PRÜFEN
+     * 4. STATUS PRÜFEN
      * =====================================================
-     *
-     * Über diesen Endpunkt dürfen Produkte nur
-     * aktiviert oder deaktiviert werden.
      */
 
     if (
@@ -112,15 +127,12 @@ export const action = async ({ request }) => {
 
     /*
      * =====================================================
-     * PRODUKT SUCHEN
+     * 5. PRODUKT SUCHEN
      * =====================================================
      *
-     * WICHTIG:
-     * Zusätzlich zur Produkt-ID wird die customerId
-     * geprüft.
-     *
-     * Dadurch kann ein Anbieter niemals den Status
-     * eines Produktes eines anderen Anbieters ändern.
+     * Die customerId wird mitgeprüft.
+     * Dadurch kann ein Anbieter nur seine eigenen
+     * Produkte aktivieren oder deaktivieren.
      */
 
     const existingProduct =
@@ -156,8 +168,144 @@ export const action = async ({ request }) => {
 
     /*
      * =====================================================
-     * STATUS SPEICHERN
+     * 6. SHOPIFY-PRODUKT SYNCHRONISIEREN
      * =====================================================
+     *
+     * Nur wenn das Produkt bereits an Marktblatt
+     * übertragen wurde.
+     *
+     * active   -> ACTIVE
+     * inactive -> DRAFT
+     */
+
+    if (existingProduct.shopifyProductId) {
+
+      /*
+       * Marktblatt-Shop ausschließlich aus der
+       * serverseitigen Umgebungsvariable laden.
+       */
+
+      const marktblattShop =
+        process.env.MARKTBLATT_SHOP;
+
+      if (!marktblattShop) {
+        throw new Error(
+          "MARKTBLATT_SHOP ist auf dem Server nicht konfiguriert."
+        );
+      }
+
+      if (
+        !marktblattShop.endsWith(
+          ".myshopify.com"
+        )
+      ) {
+        throw new Error(
+          "MARKTBLATT_SHOP enthält keine gültige Shopify-Shop-Domain."
+        );
+      }
+
+
+      /*
+       * Admin API des Marktblatt-Shops laden.
+       */
+
+      const { admin } =
+        await unauthenticated.admin(
+          marktblattShop
+        );
+
+
+      /*
+       * Gewünschten Shopify-Status bestimmen.
+       */
+
+      const shopifyStatus =
+        requestedStatus === "active"
+          ? "ACTIVE"
+          : "DRAFT";
+
+
+      /*
+       * Shopify-Produkt aktualisieren.
+       */
+
+      const shopifyResponse =
+        await admin.graphql(
+          `#graphql
+            mutation ProductStatusUpdate(
+              $product: ProductUpdateInput!
+            ) {
+              productUpdate(product: $product) {
+                product {
+                  id
+                  status
+                }
+
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }
+          `,
+          {
+            variables: {
+              product: {
+                id:
+                  existingProduct.shopifyProductId,
+
+                status:
+                  shopifyStatus,
+              },
+            },
+          }
+        );
+
+
+      const shopifyData =
+        await shopifyResponse.json();
+
+      const userErrors =
+        shopifyData?.data
+          ?.productUpdate
+          ?.userErrors ?? [];
+
+
+      /*
+       * Wenn Shopify die Änderung ablehnt,
+       * wird der Datenbankstatus NICHT geändert.
+       */
+
+      if (userErrors.length > 0) {
+        throw new Error(
+          userErrors
+            .map((error) => error.message)
+            .join(" ")
+        );
+      }
+
+
+      const changedShopifyProduct =
+        shopifyData?.data
+          ?.productUpdate
+          ?.product;
+
+
+      if (!changedShopifyProduct?.id) {
+        throw new Error(
+          "Der Produktstatus konnte bei Shopify nicht geändert werden."
+        );
+      }
+    }
+
+
+    /*
+     * =====================================================
+     * 7. STATUS IN POSTGRESQL SPEICHERN
+     * =====================================================
+     *
+     * Dieser Schritt erfolgt bewusst erst NACH der
+     * erfolgreichen Shopify-Änderung.
      */
 
     const updatedProduct =
@@ -176,7 +324,7 @@ export const action = async ({ request }) => {
 
     /*
      * =====================================================
-     * ERFOLGREICHE ANTWORT
+     * 8. ERFOLGREICHE ANTWORT
      * =====================================================
      */
 
@@ -186,8 +334,12 @@ export const action = async ({ request }) => {
 
         message:
           requestedStatus === "active"
-            ? "Produkt wurde aktiviert."
-            : "Produkt wurde deaktiviert.",
+            ? existingProduct.shopifyProductId
+              ? "Produkt wurde aktiviert und auf Marktblatt veröffentlicht."
+              : "Produkt wurde aktiviert."
+            : existingProduct.shopifyProductId
+              ? "Produkt wurde deaktiviert und auf Marktblatt ausgeblendet."
+              : "Produkt wurde deaktiviert.",
 
         product: {
           id:
@@ -241,11 +393,12 @@ export const action = async ({ request }) => {
 
 /*
  * =========================================================
- * GET NICHT ERLAUBT
+ * OPTIONS / GET
  * =========================================================
  */
 
 export const loader = async ({ request }) => {
+
   /*
    * =======================================================
    * CORS PREFLIGHT
