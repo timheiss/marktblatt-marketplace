@@ -1205,6 +1205,131 @@ const images =
         : product?.brand?.name
     ) || null;
 
+/*
+ * =========================================================
+ * ZUSÄTZLICHE PRODUKTDATEN
+ * =========================================================
+ */
+
+/*
+ * SKU / ARTIKELNUMMER
+ */
+
+const sku =
+  cleanText(
+    product?.sku
+  ) ||
+  cleanText(
+    offer?.sku
+  ) ||
+  null;
+
+
+/*
+ * GTIN / EAN / UPC
+ *
+ * Unterstützt die üblichen Schema.org-Felder.
+ */
+
+const gtin =
+  cleanText(
+    product?.gtin
+  ) ||
+  cleanText(
+    product?.gtin13
+  ) ||
+  cleanText(
+    product?.gtin14
+  ) ||
+  cleanText(
+    product?.gtin12
+  ) ||
+  cleanText(
+    product?.gtin8
+  ) ||
+  null;
+
+
+/*
+ * HERSTELLERNUMMER / MPN
+ */
+
+const mpn =
+  cleanText(
+    product?.mpn
+  ) ||
+  null;
+
+
+/*
+ * VERFÜGBARKEIT
+ *
+ * Schema.org liefert häufig beispielsweise:
+ * https://schema.org/InStock
+ *
+ * Wir speichern nur den letzten Teil:
+ * InStock
+ */
+
+let availability =
+  cleanText(
+    offer?.availability
+  ) ||
+  null;
+
+if (availability) {
+  availability =
+    availability
+      .split("/")
+      .pop() ||
+    availability;
+}
+
+
+/*
+ * PRODUKTKATEGORIE
+ */
+
+const category =
+  cleanText(
+    typeof product?.category === "string"
+      ? product.category
+      : product?.category?.name
+  ) ||
+  null;
+
+
+/*
+ * VERGLEICHSPREIS / ALTER PREIS
+ *
+ * Einige Shops stellen bei AggregateOffer
+ * einen hohen und niedrigen Preis bereit.
+ *
+ * highPrice wird nur übernommen, wenn er sich
+ * vom normalen Preis unterscheidet.
+ */
+
+let compareAtPrice =
+  offer?.highPrice ??
+  null;
+
+if (
+  compareAtPrice !== null &&
+  compareAtPrice !== undefined
+) {
+  compareAtPrice =
+    String(compareAtPrice).trim();
+
+  if (
+    price !== null &&
+    compareAtPrice === price
+  ) {
+    compareAtPrice = null;
+  }
+} else {
+  compareAtPrice = null;
+}
+
   /*
    * ANBIETER / SHOPNAME
    */
@@ -1230,21 +1355,28 @@ const images =
    * ERGEBNIS
    */
 
-  return {
-    title,
-    description,
-    price,
-    currency,
-    images,
-    brand,
-    vendor: shopName,
-    sourceUrl: pageUrl,
+return {
+  title,
+  description,
+  price,
+  currency,
+  images,
+  brand,
+  vendor: shopName,
+  sourceUrl: pageUrl,
 
-    detectionMethod:
-      product
-        ? "json-ld"
-        : "meta",
-  };
+  sku,
+  gtin,
+  mpn,
+  availability,
+  category,
+  compareAtPrice,
+
+  detectionMethod:
+    product
+      ? "json-ld"
+      : "meta",
+};
 }
 
 
@@ -1316,6 +1448,21 @@ export async function action({
         html,
         finalUrl
       );
+
+/*
+ * TEMPORÄRE DEBUG-AUSGABE
+ * Zusätzliche Produktdaten nur im Server-Log anzeigen.
+ */
+
+console.log("SCRAPER ADDITIONAL PRODUCT DATA:", {
+  sourceUrl: product.sourceUrl,
+  sku: product.sku,
+  gtin: product.gtin,
+  mpn: product.mpn,
+  availability: product.availability,
+  category: product.category,
+  compareAtPrice: product.compareAtPrice,
+});
 
     if (!product.title) {
       return Response.json(
