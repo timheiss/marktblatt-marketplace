@@ -756,9 +756,11 @@ async function changeAllProductStatuses(status) {
     </s-text>
 
 
-    <s-text>
-      So funktioniert es:
-    </s-text>
+<s-box paddingBlockStart="base">
+  <s-text type="strong">
+    So funktioniert es:
+  </s-text>
+</s-box>
 
     <s-text>
       1. Fügen Sie die URL eines Produkts aus Ihrem
