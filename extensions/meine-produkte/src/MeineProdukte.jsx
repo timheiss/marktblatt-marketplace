@@ -977,25 +977,27 @@ body: JSON.stringify({
 
 
 
-                                  <s-button
-                                    onClick={() =>
-                                      toggleProductStatus(
-                                        product
-                                      )
-                                    }
-                                    disabled={
-                                      statusChanging ||
-                                      productDeleting ||
-                                      productPublishing
-                                    }
-                                  >
-                                    {statusChanging
-                                      ? 'Status wird gespeichert...'
-                                      : product.status ===
-                                          'active'
-                                        ? 'Deaktivieren'
-                                        : 'Aktivieren'}
-                                  </s-button>
+{alreadyPublished && (
+  <s-button
+    onClick={() =>
+      toggleProductStatus(
+        product
+      )
+    }
+    disabled={
+      statusChanging ||
+      productDeleting ||
+      productPublishing
+    }
+  >
+    {statusChanging
+      ? 'Status wird gespeichert...'
+      : product.status ===
+          'active'
+        ? 'Deaktivieren'
+        : 'Aktivieren'}
+  </s-button>
+)}
 
                                   {!alreadyPublished && (
 

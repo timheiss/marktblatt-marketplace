@@ -165,6 +165,29 @@ export const action = async ({ request }) => {
       );
     }
 
+/*
+ * =====================================================
+ * AKTIVIEREN ERST NACH ÜBERTRAGUNG
+ * =====================================================
+ */
+
+if (
+  requestedStatus === "active" &&
+  !existingProduct.shopifyProductId
+) {
+  return cors(
+    Response.json(
+      {
+        success: false,
+        error:
+          "Das Produkt muss zuerst an Marktblatt übertragen werden.",
+      },
+      {
+        status: 400,
+      }
+    )
+  );
+}
 
     /*
      * =====================================================
