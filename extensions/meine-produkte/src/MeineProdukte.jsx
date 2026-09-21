@@ -86,6 +86,8 @@ function Extension() {
   const [publishingProductId, setPublishingProductId] =
     useState(null);
 
+const [bulkStatusAction, setBulkStatusAction] =
+  useState(null);
 
   /*
    * =======================================================
@@ -439,6 +441,124 @@ body: JSON.stringify({
    * =======================================================
    */
 
+/*
+ * =======================================================
+ * ALLE ÜBERTRAGENEN PRODUKTE AKTIVIEREN / DEAKTIVIEREN
+ * =======================================================
+ */
+
+async function changeAllProductStatuses(status) {
+  if (bulkStatusAction) {
+    return;
+  }
+
+  try {
+    setBulkStatusAction(status);
+    setError(null);
+    setSaveMessage(null);
+
+    /*
+     * Nur Produkte berücksichtigen, die bereits
+     * an Marktblatt übertragen wurden.
+     */
+    const publishedProducts =
+      marketplaceProducts.filter(
+        (product) => product.shopifyProductId
+      );
+
+    if (publishedProducts.length === 0) {
+      setSaveMessage(
+        'Es wurden noch keine Produkte an Marktblatt übertragen.'
+      );
+      return;
+    }
+
+    /*
+     * Produkte überspringen, die bereits den
+     * gewünschten Status besitzen.
+     */
+    const productsToChange =
+      publishedProducts.filter(
+        (product) => product.status !== status
+      );
+
+    if (productsToChange.length === 0) {
+      setSaveMessage(
+        status === 'active'
+          ? 'Alle übertragenen Produkte sind bereits aktiviert.'
+          : 'Alle übertragenen Produkte sind bereits deaktiviert.'
+      );
+      return;
+    }
+
+    const token =
+      await shopify.sessionToken.get();
+
+    /*
+     * Bewusst nacheinander ausführen.
+     * Dadurch wird die Shopify Admin API nicht gleichzeitig
+     * mit sehr vielen Statusänderungen belastet.
+     */
+    for (const product of productsToChange) {
+      const response = await fetch(
+        `${API_BASE_URL}/api/product-status`,
+        {
+          method: 'POST',
+
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+
+          body: JSON.stringify({
+            productId: product.id,
+            status,
+          }),
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            `Produkt "${product.title}" konnte nicht geändert werden.`
+        );
+      }
+    }
+
+    await loadProducts();
+
+    setSaveMessage(
+      status === 'active'
+        ? `${productsToChange.length} Produkte wurden aktiviert.`
+        : `${productsToChange.length} Produkte wurden deaktiviert.`
+    );
+
+  } catch (err) {
+    console.error(
+      'BULK PRODUCT STATUS ERROR:',
+      err
+    );
+
+    /*
+     * Liste neu laden, weil vor einem möglichen Fehler
+     * bereits einige Produkte geändert worden sein können.
+     */
+    await loadProducts();
+
+    setError(
+      err instanceof Error
+        ? err.message
+        : 'Die Produktstatus konnten nicht geändert werden.'
+    );
+
+  } finally {
+    setBulkStatusAction(null);
+  }
+}
+
   async function toggleProductStatus(product) {
     if (!product?.id) {
       return;
@@ -609,35 +729,91 @@ body: JSON.stringify({
 
         {/* PAKET */}
 
-        <s-section heading="Ihr Paket">
+<s-section heading="Ihr Paket">
 
-          <s-stack
-            direction="block"
-            gap="small"
-          >
+  <s-stack
+    direction="block"
+    gap="small"
+  >
 
-            <s-text>
-              {packageData.name}
-            </s-text>
+    <s-text>
+      {packageData.name}
+    </s-text>
 
-            <s-text>
-              {packageData.productLimit} Produkte
-            </s-text>
+    <s-text>
+      {packageData.productLimit} Produkte
+    </s-text>
 
-            <s-text>
-              {packageData.usedProducts} von{' '}
-              {packageData.productLimit}{' '}
-              Produkten verwendet
-            </s-text>
+    <s-text>
+      {packageData.usedProducts} von{' '}
+      {packageData.productLimit}{' '}
+      Produkten verwendet
+    </s-text>
 
-            <s-text>
-              {packageData.availableProducts}{' '}
-              Produkte verfügbar
-            </s-text>
+    <s-text>
+      {packageData.availableProducts}{' '}
+      Produkte verfügbar
+    </s-text>
 
-          </s-stack>
 
-        </s-section>
+    <s-text>
+      So funktioniert es:
+    </s-text>
+
+    <s-text>
+      1. Fügen Sie die URL eines Produkts aus Ihrem
+      Onlineshop hinzu.
+    </s-text>
+
+    <s-text>
+      2. Prüfen Sie die Produktdaten und übertragen Sie
+      das Produkt anschließend an Marktblatt.
+    </s-text>
+
+    <s-text>
+      3. Aktivieren Sie das Produkt, damit es auf
+      Marktblatt veröffentlicht wird.
+    </s-text>
+
+    <s-text>
+      4. Deaktivierte Produkte bleiben gespeichert und
+      können jederzeit wieder aktiviert werden.
+    </s-text>
+
+
+    <s-stack
+      direction="inline"
+      gap="small"
+    >
+
+<s-button
+  variant="primary"
+  onClick={() =>
+    changeAllProductStatuses('active')
+  }
+  disabled={bulkStatusAction !== null}
+>
+  {bulkStatusAction === 'active'
+    ? 'Alle werden aktiviert...'
+    : 'Alle aktivieren'}
+</s-button>
+
+<s-button
+  onClick={() =>
+    changeAllProductStatuses('inactive')
+  }
+  disabled={bulkStatusAction !== null}
+>
+  {bulkStatusAction === 'inactive'
+    ? 'Alle werden deaktiviert...'
+    : 'Alle deaktivieren'}
+</s-button>
+
+    </s-stack>
+
+  </s-stack>
+
+</s-section>
 
 
         {/* NEUES PRODUKT */}
