@@ -86,6 +86,9 @@ function Extension() {
   const [editDescription, setEditDescription] =
     useState('');
 
+  const [editPrice, setEditPrice] =
+    useState('');
+
   const [savingEdit, setSavingEdit] =
     useState(false);
 
@@ -276,34 +279,7 @@ function Extension() {
       setChecking(false);
     }
   }
-/*
- * =======================================================
- * BILD AUS PRODUKTVORSCHAU ENTFERNEN
- * =======================================================
- */
 
-function removePreviewImage(imageIndex) {
-  setProductPreview((currentProduct) => {
-    if (!currentProduct) {
-      return currentProduct;
-    }
-
-    const currentImages =
-      Array.isArray(currentProduct.images)
-        ? currentProduct.images
-        : [];
-
-    return {
-      ...currentProduct,
-
-      images:
-        currentImages.filter(
-          (_, index) =>
-            index !== imageIndex
-        ),
-    };
-  });
-}
 
   /*
    * =======================================================
@@ -429,7 +405,7 @@ function removePreviewImage(imageIndex) {
             'Content-Type': 'application/json',
           },
 
-          body: JSON.stringify({
+body: JSON.stringify({
   productId: product.id,
 }),
         }
@@ -496,6 +472,10 @@ function removePreviewImage(imageIndex) {
       product.description || ''
     );
 
+    setEditPrice(
+      product.price || ''
+    );
+
     setError(null);
     setSaveMessage(null);
   }
@@ -511,6 +491,7 @@ function removePreviewImage(imageIndex) {
     setEditingProduct(null);
     setEditTitle('');
     setEditDescription('');
+    setEditPrice('');
   }
 
 
@@ -551,16 +532,19 @@ function removePreviewImage(imageIndex) {
             'Content-Type': 'application/json',
           },
 
-body: JSON.stringify({
-  productId:
-    editingProduct.id,
+          body: JSON.stringify({
+            productId:
+              editingProduct.id,
 
-  title:
-    editTitle,
+            title:
+              editTitle,
 
-  description:
-    editDescription,
-}),
+            description:
+              editDescription,
+
+            price:
+              editPrice,
+          }),
         }
       );
 
@@ -828,14 +812,18 @@ body: JSON.stringify({
               Onlineshop ein.
             </s-text>
 
-<s-text>
-  Preis:{' '}
-  {editingProduct.price
-    ? `${editingProduct.price} ${
-        editingProduct.currency || ''
-      }`
-    : 'Kein Preis vorhanden'}
-</s-text>
+            <s-text-field
+              label="Produkt-URL"
+              placeholder="https://www.ihr-shop.de/produkt/..."
+              type="url"
+              value={productUrl}
+
+              onInput={(event) => {
+                setProductUrl(
+                  event.currentTarget.value
+                );
+              }}
+            />
 
             <s-button
               variant="primary"
@@ -869,44 +857,89 @@ body: JSON.stringify({
               gap="base"
             >
 
-{productPreview.images?.length > 0 ? (
-  <s-stack
-    direction="block"
-    gap="base"
-  >
-    <s-text>
-      Produktbilder: {productPreview.images.length} von maximal 5
-    </s-text>
+              {productPreview.images?.length > 0 ? (
 
-    {productPreview.images
-      .slice(0, 5)
-      .map((image, index) => (
-        <s-stack
-          key={`${image}-${index}`}
-          direction="block"
-          gap="small"
-        >
-          <s-image
-            src={image}
-            alt={`${productPreview.title || 'Produktbild'} ${index + 1}`}
-          />
+                <s-stack
+                  direction="block"
+                  gap="base"
+                >
 
-          <s-button
-            variant="secondary"
-            onClick={() =>
-              removePreviewImage(index)
-            }
-          >
-            Bild entfernen
-          </s-button>
-        </s-stack>
-      ))}
-  </s-stack>
-) : (
-  <s-text>
-    Keine Produktbilder vorhanden.
-  </s-text>
-)}
+                  <s-text>
+                    Produktbilder: {productPreview.images.length} von maximal 5
+                  </s-text>
+
+                  <s-stack
+                    direction="inline"
+                    gap="small"
+                    wrap
+                  >
+
+                    {productPreview.images.map(
+                      (image, index) => (
+
+                        <s-stack
+                          key={`${image}-${index}`}
+                          direction="block"
+                          gap="small"
+                        >
+
+                          <s-image
+                            src={image}
+                            alt={`${
+                              productPreview.title ||
+                              'Produktbild'
+                            } ${index + 1}`}
+                          />
+
+                          <s-button
+                            variant="secondary"
+                            onClick={() => {
+                              setProductPreview(
+                                (currentProduct) => {
+
+                                  if (!currentProduct) {
+                                    return currentProduct;
+                                  }
+
+                                  const currentImages =
+                                    Array.isArray(
+                                      currentProduct.images
+                                    )
+                                      ? currentProduct.images
+                                      : [];
+
+                                  return {
+                                    ...currentProduct,
+
+                                    images:
+                                      currentImages.filter(
+                                        (_, imageIndex) =>
+                                          imageIndex !== index
+                                      ),
+                                  };
+                                }
+                              );
+                            }}
+                          >
+                            Bild entfernen
+                          </s-button>
+
+                        </s-stack>
+
+                      )
+                    )}
+
+                  </s-stack>
+
+                </s-stack>
+
+              ) : (
+
+                <s-text>
+                  Keine Produktbilder vorhanden.
+                </s-text>
+
+              )}
 
               <s-text>
                 {productPreview.title}
@@ -956,7 +989,6 @@ body: JSON.stringify({
 
         )}
 
-
         {/* ERFOLGSMELDUNG */}
 
         {saveMessage && (
@@ -997,7 +1029,6 @@ body: JSON.stringify({
                     : 'e'}
                 </s-text>
 
-
                 {marketplaceProducts.length === 0 ? (
 
                   <s-text>
@@ -1006,188 +1037,271 @@ body: JSON.stringify({
 
                 ) : (
 
-                  marketplaceProducts.map(
-                    (product) => {
+                  <s-stack
+                    direction="block"
+                    gap="large"
+                  >
 
-                      const statusChanging =
-                        changingStatusId ===
-                        product.id;
+                    {marketplaceProducts.map(
+                      (product) => {
 
-                      const productDeleting =
-                        deletingProductId ===
-                        product.id;
+                        const statusChanging =
+                          changingStatusId ===
+                          product.id;
 
-                      const productPublishing =
-                        publishingProductId ===
-                        product.id;
+                        const productDeleting =
+                          deletingProductId ===
+                          product.id;
 
-                      const alreadyPublished =
-                        Boolean(
-                          product.shopifyProductId
-                        );
+                        const productPublishing =
+                          publishingProductId ===
+                          product.id;
 
-                      return (
+                        const alreadyPublished =
+                          Boolean(
+                            product.shopifyProductId
+                          );
 
-                        <s-section
-                          key={product.id}
-                          heading={product.title}
-                        >
+                        const isEditing =
+                          editingProduct?.id ===
+                          product.id;
 
-                          <s-stack
-                            direction="block"
-                            gap="small"
+                        return (
+
+                          <s-box
+                            key={product.id}
+                            border="base strong solid"
+                            borderRadius="base"
+                            padding="base"
                           >
 
-                            {product.image && (
-                              <s-image
-                                src={product.image}
-                                alt={product.title}
-                              />
-                            )}
-
-                            {product.description && (
-                              <s-text>
-                                {product.description}
-                              </s-text>
-                            )}
-
-                            <s-text>
-                              {product.price
-                                ? `${product.price} ${
-                                    product.currency ||
-                                    ''
-                                  }`
-                                : 'Kein Preis vorhanden'}
-                            </s-text>
-
-                            <s-text>
-                              Anbieter:{' '}
-                              {product.vendor ||
-                                'Unbekannt'}
-                            </s-text>
-
-                            <s-text>
-                              Status:{' '}
-
-                              {product.status ===
-                              'active'
-                                ? 'Aktiv'
-                                : product.status ===
-                                    'draft'
-                                  ? 'Entwurf'
-                                  : 'Inaktiv'}
-                            </s-text>
-
-
-                            <s-text>
-                              Marktblatt:{' '}
-
-                              {alreadyPublished
-                                ? 'Übertragen'
-                                : 'Noch nicht übertragen'}
-                            </s-text>
-
-
-                            <s-stack
-                              direction="inline"
-                              gap="small"
+                            <s-section
+                              heading={product.title}
                             >
 
-                              <s-button
-                                onClick={() =>
-                                  startEditing(
-                                    product
-                                  )
-                                }
-                                disabled={
-                                  statusChanging ||
-                                  productDeleting ||
-                                  productPublishing
-                                }
-                              >
-                                Bearbeiten
-                              </s-button>
-
-
-                              <s-button
-                                onClick={() =>
-                                  toggleProductStatus(
-                                    product
-                                  )
-                                }
-                                disabled={
-                                  statusChanging ||
-                                  productDeleting ||
-                                  productPublishing
-                                }
+                              <s-stack
+                                direction="block"
+                                gap="small"
                               >
 
-                                {statusChanging
-                                  ? 'Status wird gespeichert...'
-                                  : product.status ===
-                                      'active'
-                                    ? 'Deaktivieren'
-                                    : 'Aktivieren'}
+                                {product.image && (
+                                  <s-image
+                                    src={product.image}
+                                    alt={product.title}
+                                  />
+                                )}
 
-                              </s-button>
+                                {product.description && (
+                                  <s-text>
+                                    {product.description}
+                                  </s-text>
+                                )}
 
+                                <s-text>
+                                  {product.price
+                                    ? `${product.price} ${
+                                        product.currency ||
+                                        ''
+                                      }`
+                                    : 'Kein Preis vorhanden'}
+                                </s-text>
 
-                              {!alreadyPublished && (
+                                <s-text>
+                                  Anbieter:{' '}
+                                  {product.vendor ||
+                                    'Unbekannt'}
+                                </s-text>
 
-                                <s-button
-                                  variant="primary"
+                                <s-text>
+                                  Status:{' '}
+                                  {product.status ===
+                                  'active'
+                                    ? 'Aktiv'
+                                    : product.status ===
+                                        'draft'
+                                      ? 'Entwurf'
+                                      : 'Inaktiv'}
+                                </s-text>
 
-                                  onClick={() =>
-                                    publishProduct(
-                                      product
-                                    )
-                                  }
+                                <s-text>
+                                  Marktblatt:{' '}
+                                  {alreadyPublished
+                                    ? 'Übertragen'
+                                    : 'Noch nicht übertragen'}
+                                </s-text>
 
-                                  disabled={
-                                    statusChanging ||
-                                    productDeleting ||
-                                    productPublishing
-                                  }
+                                <s-stack
+                                  direction="inline"
+                                  gap="small"
                                 >
 
-                                  {productPublishing
-                                    ? 'Wird übertragen...'
-                                    : 'An Marktblatt übertragen'}
+                                  <s-button
+                                    onClick={() =>
+                                      startEditing(
+                                        product
+                                      )
+                                    }
+                                    disabled={
+                                      statusChanging ||
+                                      productDeleting ||
+                                      productPublishing
+                                    }
+                                  >
+                                    Bearbeiten
+                                  </s-button>
 
-                                </s-button>
+                                  <s-button
+                                    onClick={() =>
+                                      toggleProductStatus(
+                                        product
+                                      )
+                                    }
+                                    disabled={
+                                      statusChanging ||
+                                      productDeleting ||
+                                      productPublishing
+                                    }
+                                  >
+                                    {statusChanging
+                                      ? 'Status wird gespeichert...'
+                                      : product.status ===
+                                          'active'
+                                        ? 'Deaktivieren'
+                                        : 'Aktivieren'}
+                                  </s-button>
 
-                              )}
+                                  {!alreadyPublished && (
 
+                                    <s-button
+                                      variant="primary"
+                                      onClick={() =>
+                                        publishProduct(
+                                          product
+                                        )
+                                      }
+                                      disabled={
+                                        statusChanging ||
+                                        productDeleting ||
+                                        productPublishing
+                                      }
+                                    >
+                                      {productPublishing
+                                        ? 'Wird übertragen...'
+                                        : 'An Marktblatt übertragen'}
+                                    </s-button>
 
-                              <s-button
-                                onClick={() =>
-                                  deleteProduct(
-                                    product
-                                  )
-                                }
+                                  )}
 
-                                disabled={
-                                  statusChanging ||
-                                  productDeleting ||
-                                  productPublishing
-                                }
-                              >
+                                  <s-button
+                                    onClick={() =>
+                                      deleteProduct(
+                                        product
+                                      )
+                                    }
+                                    disabled={
+                                      statusChanging ||
+                                      productDeleting ||
+                                      productPublishing
+                                    }
+                                  >
+                                    {productDeleting
+                                      ? 'Produkt wird gelöscht...'
+                                      : 'Löschen'}
+                                  </s-button>
 
-                                {productDeleting
-                                  ? 'Produkt wird gelöscht...'
-                                  : 'Löschen'}
+                                </s-stack>
 
-                              </s-button>
+                                {/* PRODUKT DIREKT HIER BEARBEITEN */}
 
-                            </s-stack>
+                                {isEditing && (
 
-                          </s-stack>
+                                  <s-section heading="Produkt bearbeiten">
 
-                        </s-section>
+                                    <s-stack
+                                      direction="block"
+                                      gap="base"
+                                    >
 
-                      );
-                    }
-                  )
+                                      <s-text>
+                                        Sie bearbeiten:{' '}
+                                        {editingProduct.title}
+                                      </s-text>
+
+                                      <s-text-field
+                                        label="Produkttitel"
+                                        value={editTitle}
+                                        onInput={(event) => {
+                                          setEditTitle(
+                                            event.currentTarget.value
+                                          );
+                                        }}
+                                      />
+
+                                      <s-text-field
+                                        label="Beschreibung"
+                                        value={editDescription}
+                                        onInput={(event) => {
+                                          setEditDescription(
+                                            event.currentTarget.value
+                                          );
+                                        }}
+                                      />
+
+                                      <s-text>
+                                        Preis:{' '}
+                                        {product.price
+                                          ? `${product.price} ${
+                                              product.currency ||
+                                              ''
+                                            }`
+                                          : 'Kein Preis vorhanden'}
+                                      </s-text>
+
+                                      <s-text>
+                                        Der Preis wird aus dem Onlineshop übernommen und kann hier nicht geändert werden.
+                                      </s-text>
+
+                                      <s-stack
+                                        direction="inline"
+                                        gap="small"
+                                      >
+
+                                        <s-button
+                                          variant="primary"
+                                          onClick={saveEditing}
+                                          disabled={savingEdit}
+                                        >
+                                          {savingEdit
+                                            ? 'Änderungen werden gespeichert...'
+                                            : 'Änderungen speichern'}
+                                        </s-button>
+
+                                        <s-button
+                                          onClick={cancelEditing}
+                                          disabled={savingEdit}
+                                        >
+                                          Abbrechen
+                                        </s-button>
+
+                                      </s-stack>
+
+                                    </s-stack>
+
+                                  </s-section>
+
+                                )}
+
+                              </s-stack>
+
+                            </s-section>
+
+                          </s-box>
+
+                        );
+                      }
+                    )}
+
+                  </s-stack>
 
                 )}
 
@@ -1198,86 +1312,6 @@ body: JSON.stringify({
           </s-stack>
 
         </s-section>
-
-
-        {/* PRODUKT BEARBEITEN */}
-
-        {editingProduct && (
-
-          <s-section heading="Produkt bearbeiten">
-
-            <s-stack
-              direction="block"
-              gap="base"
-            >
-
-              <s-text>
-                Sie bearbeiten:{' '}
-                {editingProduct.title}
-              </s-text>
-
-              <s-text-field
-                label="Produkttitel"
-                value={editTitle}
-
-                onInput={(event) => {
-                  setEditTitle(
-                    event.currentTarget.value
-                  );
-                }}
-              />
-
-              <s-text-field
-                label="Beschreibung"
-                value={editDescription}
-
-                onInput={(event) => {
-                  setEditDescription(
-                    event.currentTarget.value
-                  );
-                }}
-              />
-
-              <s-text-field
-                label="Preis"
-                value={editPrice}
-
-                onInput={(event) => {
-                  setEditPrice(
-                    event.currentTarget.value
-                  );
-                }}
-              />
-
-              <s-stack
-                direction="inline"
-                gap="small"
-              >
-
-                <s-button
-                  variant="primary"
-                  onClick={saveEditing}
-                  disabled={savingEdit}
-                >
-                  {savingEdit
-                    ? 'Änderungen werden gespeichert...'
-                    : 'Änderungen speichern'}
-                </s-button>
-
-                <s-button
-                  onClick={cancelEditing}
-                  disabled={savingEdit}
-                >
-                  Abbrechen
-                </s-button>
-
-              </s-stack>
-
-            </s-stack>
-
-          </s-section>
-
-        )}
 
       </s-stack>
 
