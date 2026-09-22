@@ -1535,6 +1535,66 @@ const mpn =
   ) ||
   null;
 
+/*
+ * =========================================================
+ * WEITERE PRODUKTMERKMALE
+ * =========================================================
+ */
+
+/*
+ * PRODUKTTYP
+ *
+ * Manche Shops unterscheiden zwischen einer allgemeinen
+ * Kategorie und einem konkreteren Produkttyp.
+ */
+
+const productType =
+  cleanText(
+    product?.additionalType
+  ) ||
+  cleanText(
+    product?.productType
+  ) ||
+  null;
+
+
+/*
+ * MATERIAL
+ */
+
+const material =
+  cleanText(
+    typeof product?.material === "string"
+      ? product.material
+      : product?.material?.name
+  ) ||
+  null;
+
+
+/*
+ * FARBE
+ */
+
+const color =
+  cleanText(
+    typeof product?.color === "string"
+      ? product.color
+      : product?.color?.name
+  ) ||
+  null;
+
+
+/*
+ * GRÖSSE
+ */
+
+const size =
+  cleanText(
+    typeof product?.size === "string"
+      ? product.size
+      : product?.size?.name
+  ) ||
+  null;
 
 /*
  * VERFÜGBARKEIT
@@ -1685,6 +1745,10 @@ metaDescription,
   sku,
   gtin,
   mpn,
+productType,
+material,
+color,
+size,
   availability,
   category,
   compareAtPrice,
@@ -1777,6 +1841,10 @@ console.log("SCRAPER ADDITIONAL PRODUCT DATA:", {
   sku: product.sku,
   gtin: product.gtin,
   mpn: product.mpn,
+productType: product.productType,
+material: product.material,
+color: product.color,
+size: product.size,
   availability: product.availability,
   category: product.category,
 metaTitle: product.metaTitle,
