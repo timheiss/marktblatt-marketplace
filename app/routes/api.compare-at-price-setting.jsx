@@ -11,6 +11,31 @@ import {
  * =========================================================
  */
 
+export const loader = async ({ request }) => {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers":
+          "Authorization, Content-Type",
+        "Access-Control-Allow-Methods":
+          "POST, OPTIONS",
+      },
+    });
+  }
+
+  return Response.json(
+    {
+      success: false,
+      error: "Method not allowed.",
+    },
+    {
+      status: 405,
+    }
+  );
+};
+
 export const action = async ({ request }) => {
   let cors = (response) => response;
 
