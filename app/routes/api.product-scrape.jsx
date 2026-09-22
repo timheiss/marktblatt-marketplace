@@ -1300,29 +1300,79 @@ const category =
 
 
 /*
- * VERGLEICHSPREIS / ALTER PREIS
+ * VERGLEICHSPREIS / STREICHPREIS
  *
- * Einige Shops stellen bei AggregateOffer
- * einen hohen und niedrigen Preis bereit.
- *
- * highPrice wird nur übernommen, wenn er sich
- * vom normalen Preis unterscheidet.
+ * Zuerst strukturierte Daten verwenden.
+ * Falls dort kein Vergleichspreis vorhanden ist,
+ * typische HTML-Elemente für Streichpreise prüfen.
  */
 
 let compareAtPrice =
   offer?.highPrice ??
   null;
 
+
+/*
+ * HTML-FALLBACK
+ *
+ * Viele Shopify-Themes verwenden beispielsweise:
+ *
+ * <span class="compare-at-price">€47,00</span>
+ */
+
+if (
+  compareAtPrice === null ||
+  compareAtPrice === undefined ||
+  compareAtPrice === ""
+) {
+  const compareAtPriceText =
+    cleanText(
+      $(".compare-at-price")
+        .first()
+        .text()
+    );
+
+  if (compareAtPriceText) {
+    const match =
+      compareAtPriceText.match(
+        /(\d{1,3}(?:[.\s]\d{3})*(?:,\d{1,2})|\d+(?:\.\d{1,2})?)/
+      );
+
+    if (match?.[1]) {
+      let normalized =
+        match[1]
+          .replace(/\s/g, "");
+
+      if (normalized.includes(",")) {
+        normalized =
+          normalized
+            .replace(/\./g, "")
+            .replace(",", ".");
+      }
+
+      compareAtPrice =
+        normalized;
+    }
+  }
+}
+
+
+/*
+ * VERGLEICHSPREIS NORMALISIEREN
+ */
+
 if (
   compareAtPrice !== null &&
-  compareAtPrice !== undefined
+  compareAtPrice !== undefined &&
+  compareAtPrice !== ""
 ) {
   compareAtPrice =
     String(compareAtPrice).trim();
 
   if (
     price !== null &&
-    compareAtPrice === price
+    compareAtPrice ===
+      String(price).trim()
   ) {
     compareAtPrice = null;
   }
