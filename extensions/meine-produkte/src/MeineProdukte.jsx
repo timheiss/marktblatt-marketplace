@@ -889,15 +889,13 @@ async function changeAllProductStatuses(status) {
   direction="block"
   gap="small"
 >
-  <s-text>
-    <strong>Streichpreisprüfung</strong>
-  </s-text>
+<s-text>
+  <strong>Funktion Streichpreis</strong>
+</s-text>
 
-  <s-text>
-    Streichpreis / Vergleichspreis korrekt? Wenn Sie keine
-    Streichpreise auf Marktblatt anzeigen möchten, können Sie
-    diese hier deaktivieren.
-  </s-text>
+<s-text>
+  Bei falscher Ausgabe, können Sie den Streichpreis deaktivieren.
+</s-text>
 
   <s-button
     onClick={() =>
@@ -1081,6 +1079,15 @@ async function changeAllProductStatuses(status) {
                     : ''}
                 </s-text>
               )}
+
+{productPreview.compareAtPrice && (
+  <s-text>
+    Streichpreis: {productPreview.compareAtPrice}
+    {productPreview.currency
+      ? ` ${productPreview.currency}`
+      : ''}
+  </s-text>
+)}
 
               <s-text>
                 Anbieter:{' '}
