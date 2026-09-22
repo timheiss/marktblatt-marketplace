@@ -818,6 +818,208 @@ function getOffer(product) {
   return product.offers;
 }
 
+/*
+ * =========================================================
+ * STREICHPREIS / VERGLEICHSPREIS ERMITTELN
+ * =========================================================
+ *
+ * Die Erkennung ist bewusst mehrstufig aufgebaut.
+ *
+ * 1. Eindeutige strukturierte Daten
+ * 2. Shopify-spezifische Erkennung
+ * 3. Später weitere Shopsysteme
+ *
+ * Wenn kein Streichpreis eindeutig dem Hauptprodukt
+ * zugeordnet werden kann, wird null zurückgegeben.
+ */
+
+function getCompareAtPrice(
+  $,
+  product,
+  offer,
+  pageUrl,
+  currentPrice
+) {
+  /*
+   * =======================================================
+   * ERGEBNIS NORMALISIEREN
+   * =======================================================
+   */
+
+  const normalizeComparePrice = (
+    value
+  ) => {
+    if (
+      value === null ||
+      value === undefined ||
+      value === ""
+    ) {
+      return null;
+    }
+
+    let text =
+      String(value)
+        .trim()
+        .replace(/\s/g, "")
+        .replace(/[^\d.,]/g, "");
+
+    if (!text) {
+      return null;
+    }
+
+    /*
+     * Deutsches/europäisches Format:
+     *
+     * 47,00
+     * 1.299,00
+     */
+
+    if (text.includes(",")) {
+      text =
+        text
+          .replace(/\./g, "")
+          .replace(",", ".");
+    }
+
+    const number =
+      Number(text);
+
+    if (
+      !Number.isFinite(number) ||
+      number < 0
+    ) {
+      return null;
+    }
+
+    return number.toFixed(2);
+  };
+
+
+  const normalizedCurrentPrice =
+    normalizeComparePrice(
+      currentPrice
+    );
+
+
+  /*
+   * =======================================================
+   * 1. STRUKTURIERTE DATEN
+   * =======================================================
+   *
+   * highPrice wird nur berücksichtigt, wenn tatsächlich
+   * ein anderer Preis als der aktuelle Produktpreis
+   * vorhanden ist.
+   */
+
+  const structuredPrice =
+    normalizeComparePrice(
+      offer?.highPrice
+    );
+
+  if (
+    structuredPrice &&
+    structuredPrice !==
+      normalizedCurrentPrice
+  ) {
+    return {
+      price:
+        structuredPrice,
+
+      source:
+        "structured-data",
+    };
+  }
+
+
+  /*
+   * =======================================================
+   * 2. SHOPIFY – AUSGEWÄHLTE VARIANTE
+   * =======================================================
+   *
+   * Shopify-Seiten können die aktuelle Variante über
+   * ?variant=... in der URL übergeben.
+   *
+   * Wir suchen ausschließlich einen Produktbereich,
+   * dessen data-current-variant-id exakt dieser Variante
+   * entspricht.
+   *
+   * Dadurch werden Preise aus Empfehlungen,
+   * Predictive Search und anderen Produktkarten
+   * nicht übernommen.
+   */
+
+  try {
+    const url =
+      new URL(pageUrl);
+
+    const variantId =
+      url.searchParams.get(
+        "variant"
+      );
+
+    if (variantId) {
+      const stickyProduct =
+        $(
+          `sticky-add-to-cart[data-current-variant-id="${variantId}"]`
+        ).first();
+
+      if (stickyProduct.length) {
+        const compareText =
+          cleanText(
+            stickyProduct
+              .find(
+                ".compare-at-price"
+              )
+              .first()
+              .text()
+          );
+
+        const shopifyPrice =
+          normalizeComparePrice(
+            compareText
+          );
+
+        if (
+          shopifyPrice &&
+          shopifyPrice !==
+            normalizedCurrentPrice
+        ) {
+          return {
+            price:
+              shopifyPrice,
+
+            source:
+              "shopify-selected-variant",
+          };
+        }
+      }
+    }
+  } catch {
+    /*
+     * Keine Shopify-spezifischen Daten gefunden.
+     * Andere Erkennungsmethoden können später folgen.
+     */
+  }
+
+
+  /*
+   * =======================================================
+   * KEIN EINDEUTIGER STREICHPREIS
+   * =======================================================
+   */
+
+  return {
+    price: null,
+    source: null,
+  };
+}
+
+
+/*
+ * =========================================================
+ * HTML HERUNTERLADEN
+ * =========================================================
+ */
 
 /*
  * =========================================================
@@ -1300,85 +1502,28 @@ const category =
 
 
 /*
+ * =========================================================
  * VERGLEICHSPREIS / STREICHPREIS
+ * =========================================================
  *
- * Zuerst strukturierte Daten verwenden.
- * Falls dort kein Vergleichspreis vorhanden ist,
- * typische HTML-Elemente für Streichpreise prüfen.
+ * Die Erkennung erfolgt zentral über
+ * getCompareAtPrice().
  */
 
-let compareAtPrice =
-  offer?.highPrice ??
-  null;
+const compareAtPriceResult =
+  getCompareAtPrice(
+    $,
+    product,
+    offer,
+    pageUrl,
+    price
+  );
 
+const compareAtPrice =
+  compareAtPriceResult.price;
 
-/*
- * HTML-FALLBACK
- *
- * Viele Shopify-Themes verwenden beispielsweise:
- *
- * <span class="compare-at-price">€47,00</span>
- */
-
-if (
-  compareAtPrice === null ||
-  compareAtPrice === undefined ||
-  compareAtPrice === ""
-) {
-  const compareAtPriceText =
-    cleanText(
-      $(".compare-at-price")
-        .first()
-        .text()
-    );
-
-  if (compareAtPriceText) {
-    const match =
-      compareAtPriceText.match(
-        /(\d{1,3}(?:[.\s]\d{3})*(?:,\d{1,2})|\d+(?:\.\d{1,2})?)/
-      );
-
-    if (match?.[1]) {
-      let normalized =
-        match[1]
-          .replace(/\s/g, "");
-
-      if (normalized.includes(",")) {
-        normalized =
-          normalized
-            .replace(/\./g, "")
-            .replace(",", ".");
-      }
-
-      compareAtPrice =
-        normalized;
-    }
-  }
-}
-
-
-/*
- * VERGLEICHSPREIS NORMALISIEREN
- */
-
-if (
-  compareAtPrice !== null &&
-  compareAtPrice !== undefined &&
-  compareAtPrice !== ""
-) {
-  compareAtPrice =
-    String(compareAtPrice).trim();
-
-  if (
-    price !== null &&
-    compareAtPrice ===
-      String(price).trim()
-  ) {
-    compareAtPrice = null;
-  }
-} else {
-  compareAtPrice = null;
-}
+const compareAtPriceSource =
+  compareAtPriceResult.source;
 
   /*
    * ANBIETER / SHOPNAME
@@ -1421,6 +1566,7 @@ return {
   availability,
   category,
   compareAtPrice,
+  compareAtPriceSource,
 
   detectionMethod:
     product
@@ -1512,6 +1658,7 @@ console.log("SCRAPER ADDITIONAL PRODUCT DATA:", {
   availability: product.availability,
   category: product.category,
   compareAtPrice: product.compareAtPrice,
+  compareAtPriceSource: product.compareAtPriceSource,
 });
 
     if (!product.title) {
