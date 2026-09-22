@@ -889,9 +889,11 @@ async function changeAllProductStatuses(status) {
   direction="block"
   gap="small"
 >
-<s-text>
-  <strong>Funktion Streichpreis</strong>
-</s-text>
+<s-box paddingBlockStart="base">
+  <s-text type="strong">
+    Funktion Streichpreis
+  </s-text>
+</s-box>
 
 <s-text>
   Bei falscher Ausgabe, können Sie den Streichpreis deaktivieren.
