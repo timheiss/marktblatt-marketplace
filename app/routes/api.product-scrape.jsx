@@ -1597,6 +1597,138 @@ const size =
   null;
 
 /*
+ * =========================================================
+ * GOOGLE / MERCHANT PRODUKTDATEN
+ * =========================================================
+ */
+
+/*
+ * ZUSTAND
+ *
+ * Google-Werte:
+ * new
+ * used
+ * refurbished
+ */
+
+let condition =
+  cleanText(
+    product?.itemCondition
+  ) ||
+  cleanText(
+    offer?.itemCondition
+  ) ||
+  null;
+
+if (condition) {
+  const normalizedCondition =
+    condition
+      .split("/")
+      .pop()
+      ?.toLowerCase();
+
+  if (
+    normalizedCondition === "newcondition" ||
+    normalizedCondition === "new"
+  ) {
+    condition = "new";
+  } else if (
+    normalizedCondition === "usedcondition" ||
+    normalizedCondition === "used"
+  ) {
+    condition = "used";
+  } else if (
+    normalizedCondition === "refurbishedcondition" ||
+    normalizedCondition === "refurbished"
+  ) {
+    condition = "refurbished";
+  } else {
+    condition = null;
+  }
+}
+
+
+/*
+ * GESCHLECHT
+ *
+ * Nur übernehmen, wenn die Quelle einen
+ * eindeutigen unterstützten Wert liefert.
+ */
+
+let gender =
+  cleanText(
+    product?.gender
+  ) ||
+  null;
+
+if (gender) {
+  gender =
+    gender.toLowerCase();
+
+  if (
+    ![
+      "male",
+      "female",
+      "unisex",
+    ].includes(gender)
+  ) {
+    gender = null;
+  }
+}
+
+
+/*
+ * ALTERSGRUPPE
+ */
+
+let ageGroup =
+  cleanText(
+    product?.ageGroup
+  ) ||
+  null;
+
+if (ageGroup) {
+  ageGroup =
+    ageGroup.toLowerCase();
+
+  if (
+    ![
+      "newborn",
+      "infant",
+      "toddler",
+      "kids",
+      "adult",
+    ].includes(ageGroup)
+  ) {
+    ageGroup = null;
+  }
+}
+
+
+/*
+ * NICHT JUGENDFREIER INHALT
+ *
+ * Nur setzen, wenn die Quelle ausdrücklich
+ * einen booleschen Wert bereitstellt.
+ */
+
+const adult =
+  typeof product?.isAdultProduct === "boolean"
+    ? product.isAdultProduct
+    : null;
+
+
+/*
+ * VARIANTENGRUPPE
+ */
+
+const itemGroupId =
+  cleanText(
+    product?.inProductGroupWithID
+  ) ||
+  null;
+
+/*
  * VERFÜGBARKEIT
  *
  * Schema.org liefert häufig beispielsweise:
@@ -1749,6 +1881,11 @@ productType,
 material,
 color,
 size,
+condition,
+gender,
+ageGroup,
+adult,
+itemGroupId,
   availability,
   category,
   compareAtPrice,
@@ -1849,6 +1986,11 @@ size: product.size,
   category: product.category,
 metaTitle: product.metaTitle,
 metaDescription: product.metaDescription,
+condition: product.condition,
+gender: product.gender,
+ageGroup: product.ageGroup,
+adult: product.adult,
+itemGroupId: product.itemGroupId,
   compareAtPrice: product.compareAtPrice,
   compareAtPriceSource: product.compareAtPriceSource,
 });
