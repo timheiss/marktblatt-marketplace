@@ -398,6 +398,22 @@ export const action = async ({ request }) => {
           ).trim()
         : null;
 
+const compareAtPrice =
+  product.compareAtPrice !== undefined &&
+  product.compareAtPrice !== null &&
+  product.compareAtPrice !== ""
+    ? String(
+        product.compareAtPrice
+      ).trim()
+    : null;
+
+const compareAtPriceSource =
+  product.compareAtPriceSource
+    ? String(
+        product.compareAtPriceSource
+      ).trim()
+    : null;
+
     const images =
       prepareImages(
         product.images
@@ -430,14 +446,17 @@ export const action = async ({ request }) => {
           title,
           description,
 
-          price,
-          currency,
+price,
+currency,
 
-          vendor,
-          brand,
+vendor,
+brand,
 
-          sourceUrl,
-          images,
+compareAtPrice,
+compareAtPriceSource,
+
+sourceUrl,
+images,
 
           status: "draft",
 

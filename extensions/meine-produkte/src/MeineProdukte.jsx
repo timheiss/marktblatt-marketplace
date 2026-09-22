@@ -28,12 +28,13 @@ function Extension() {
   const [marketplaceProducts, setMarketplaceProducts] =
     useState([]);
 
-  const [packageData, setPackageData] = useState({
-    name: 'Business',
-    productLimit: 100,
-    usedProducts: 0,
-    availableProducts: 100,
-  });
+const [packageData, setPackageData] = useState({
+  name: 'Business',
+  productLimit: 100,
+  usedProducts: 0,
+  availableProducts: 100,
+  compareAtPricesEnabled: true,
+});
 
   const [loadingProducts, setLoadingProducts] =
     useState(true);
@@ -85,6 +86,9 @@ function Extension() {
 
   const [publishingProductId, setPublishingProductId] =
     useState(null);
+
+const [changingCompareAtPrices, setChangingCompareAtPrices] =
+  useState(false);
 
 const [bulkStatusAction, setBulkStatusAction] =
   useState(null);
@@ -154,9 +158,9 @@ const [bulkStatusAction, setBulkStatusAction] =
             data.package.usedProducts ??
             0,
 
-          availableProducts:
-            data.package.availableProducts ??
-            0,
+compareAtPricesEnabled:
+  data.package.compareAtPricesEnabled ??
+  true,
         });
       }
 
@@ -440,6 +444,74 @@ body: JSON.stringify({
    * STATUS DAUERHAFT Ã„NDERN
    * =======================================================
    */
+
+/*
+ * =======================================================
+ * STREICHPREISE AKTIVIEREN / DEAKTIVIEREN
+ * =======================================================
+ */
+
+async function changeCompareAtPrices(enabled) {
+  if (changingCompareAtPrices) {
+    return;
+  }
+
+  try {
+    setChangingCompareAtPrices(true);
+    setError(null);
+    setSaveMessage(null);
+
+    const token =
+      await shopify.sessionToken.get();
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/compare-at-price-setting`,
+      {
+        method: 'POST',
+
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+
+        body: JSON.stringify({
+          enabled,
+        }),
+      }
+    );
+
+    const data =
+      await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(
+        data.error ||
+          'Die Streichpreis-Einstellung konnte nicht geändert werden.'
+      );
+    }
+
+    setPackageData((current) => ({
+      ...current,
+
+      compareAtPricesEnabled:
+        data.compareAtPricesEnabled,
+    }));
+
+    setSaveMessage(
+      data.compareAtPricesEnabled
+        ? 'Streichpreise wurden aktiviert.'
+        : 'Streichpreise wurden deaktiviert.'
+    );
+
+  } catch (error) {
+    setError(
+      error?.message ||
+        'Die Streichpreis-Einstellung konnte nicht geändert werden.'
+    );
+  } finally {
+    setChangingCompareAtPrices(false);
+  }
+}
 
 /*
  * =======================================================
@@ -812,6 +884,36 @@ async function changeAllProductStatuses(status) {
 </s-button>
 
     </s-stack>
+
+<s-stack
+  direction="block"
+  gap="small"
+>
+  <s-text>
+    <strong>Streichpreisprüfung</strong>
+  </s-text>
+
+  <s-text>
+    Streichpreis / Vergleichspreis korrekt? Wenn Sie keine
+    Streichpreise auf Marktblatt anzeigen möchten, können Sie
+    diese hier deaktivieren.
+  </s-text>
+
+  <s-button
+    onClick={() =>
+      changeCompareAtPrices(
+        !packageData.compareAtPricesEnabled
+      )
+    }
+    disabled={changingCompareAtPrices}
+  >
+    {changingCompareAtPrices
+      ? 'Streichpreise werden geändert...'
+      : packageData.compareAtPricesEnabled
+        ? 'Streichpreise deaktivieren'
+        : 'Streichpreise aktivieren'}
+  </s-button>
+</s-stack>
 
   </s-stack>
 

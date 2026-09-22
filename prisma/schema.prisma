@@ -7,18 +7,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
-/*
+/**
  * =========================================================
  * SHOPIFY SESSION
  * =========================================================
  */
 
 model Session {
-  id            String   @id
+  id            String    @id
   shop          String
   state         String
-  isOnline      Boolean  @default(false)
+  isOnline      Boolean   @default(false)
   scope         String?
   expires       DateTime?
   accessToken   String
@@ -26,17 +25,16 @@ model Session {
   firstName     String?
   lastName      String?
   email         String?
-  accountOwner  Boolean  @default(false)
+  accountOwner  Boolean   @default(false)
   locale        String?
-  collaborator  Boolean? @default(false)
-  emailVerified Boolean? @default(false)
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
 
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
 
-
-/*
+/**
  * =========================================================
  * MARKTBLATT PAKETE / ABONNEMENTS
  * =========================================================
@@ -46,7 +44,7 @@ model Subscription {
   id String @id @default(cuid())
 
   // Shopify-Kunde
-  customerId    String @unique
+  customerId    String  @unique
   customerEmail String?
 
   // Aktuelles Marktblatt-Paket
@@ -55,6 +53,9 @@ model Subscription {
 
   // Abo-Status
   status String @default("active")
+
+  // Streich-/Vergleichspreise auf Marktblatt anzeigen
+  compareAtPricesEnabled Boolean @default(true)
 
   // Stripe-Daten
   stripeCustomerId     String?
@@ -69,8 +70,7 @@ model Subscription {
   updatedAt DateTime @updatedAt
 }
 
-
-/*
+/**
  * =========================================================
  * MARKTBLATT PRODUKTE
  * =========================================================
@@ -79,15 +79,14 @@ model Subscription {
 model MarketplaceProduct {
   id String @id @default(cuid())
 
-  /*
+  /**
    * Eigentümer / Anbieter
    */
 
   customerId    String
   customerEmail String?
 
-
-  /*
+  /**
    * Produktdaten
    */
 
@@ -100,28 +99,26 @@ model MarketplaceProduct {
   vendor String?
   brand  String?
 
+  // Erkannter Streich-/Vergleichspreis
+  compareAtPrice       String?
+  compareAtPriceSource String?
 
-  /*
+  /**
    * Ursprüngliche Produktseite beim Anbieter
    */
 
   sourceUrl String
 
-
-  /*
+  /**
    * Produktbilder
-   *
    * Werden zunächst als JSON-String gespeichert.
    */
 
   images String?
 
-
-  /*
+  /**
    * Marktblatt-Status
-   *
    * Mögliche Werte:
-   *
    * active
    * inactive
    * draft
@@ -130,8 +127,7 @@ model MarketplaceProduct {
 
   status String @default("active")
 
-
-  /*
+  /**
    * =======================================================
    * SHOPIFY VERKNÜPFUNG
    * =======================================================
@@ -143,25 +139,21 @@ model MarketplaceProduct {
 
   shopifyProductId String? @unique
 
-
   // Shopify Variant GID
   // Beispiel:
   // gid://shopify/ProductVariant/123456789
 
   shopifyVariantId String? @unique
 
-
-  /*
+  /**
    * Shopify Handle
-   *
    * Beispiel:
    * armband-18k-gold-charm-bambus
    */
 
   shopifyHandle String?
 
-
-  /*
+  /**
    * =======================================================
    * VERWALTUNG
    * =======================================================
@@ -170,8 +162,7 @@ model MarketplaceProduct {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-
-  /*
+  /**
    * INDEXE
    */
 

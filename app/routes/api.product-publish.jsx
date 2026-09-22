@@ -428,6 +428,21 @@ export const action = async ({ request }) => {
         product.price
       );
 
+const compareAtPrice =
+  subscription.compareAtPricesEnabled
+    ? normalizePrice(
+        product.compareAtPrice
+      )
+    : null;
+
+const validCompareAtPrice =
+  compareAtPrice !== null &&
+  price !== null &&
+  Number(compareAtPrice) >
+    Number(price)
+    ? compareAtPrice
+    : null;
+
     const currency =
       product.currency
         ? String(
@@ -742,8 +757,9 @@ export const action = async ({ request }) => {
                 variants: $variants
               ) {
                 productVariants {
-                  id
-                  price
+  id
+  price
+  compareAtPrice
                 }
 
                 userErrors {
@@ -758,14 +774,17 @@ export const action = async ({ request }) => {
               productId:
                 shopifyProductId,
 
-              variants: [
-                {
-                  id:
-                    firstVariant.id,
+variants: [
+  {
+    id:
+      firstVariant.id,
 
-                  price,
-                },
-              ],
+    price,
+
+    compareAtPrice:
+      validCompareAtPrice,
+  },
+],
             },
           }
         );

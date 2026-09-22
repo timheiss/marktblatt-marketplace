@@ -292,6 +292,9 @@ export const loader = async ({ request }) => {
 
             availableProducts,
 
+compareAtPricesEnabled:
+  subscription.compareAtPricesEnabled,
+
             currentPeriodStart:
               subscription.currentPeriodStart,
 
