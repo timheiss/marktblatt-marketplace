@@ -1257,6 +1257,79 @@ function extractProduct(
         .attr("content")
     );
 
+/*
+ * =========================================================
+ * SEO / META-DATEN
+ * =========================================================
+ *
+ * Meta-Titel: maximal 70 Zeichen
+ * Meta-Beschreibung: maximal 160 Zeichen
+ *
+ * Zu lange Texte werden möglichst am letzten
+ * vollständigen Wort abgeschnitten.
+ */
+
+function truncateMetaText(value, maxLength) {
+  const text =
+    cleanText(value);
+
+  if (!text) {
+    return null;
+  }
+
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  const shortened =
+    text.slice(0, maxLength + 1);
+
+  const lastSpace =
+    shortened.lastIndexOf(" ");
+
+  /*
+   * Falls innerhalb des Bereichs kein sinnvoller
+   * Wortabstand gefunden wurde, hart begrenzen.
+   */
+  if (lastSpace <= 0) {
+    return text
+      .slice(0, maxLength)
+      .trim();
+  }
+
+  return shortened
+    .slice(0, lastSpace)
+    .trim();
+}
+
+
+const rawMetaTitle =
+  meta('meta[property="og:title"]') ||
+  meta('meta[name="twitter:title"]') ||
+  cleanText(
+    $("title").first().text()
+  ) ||
+  null;
+
+const metaTitle =
+  truncateMetaText(
+    rawMetaTitle,
+    70
+  );
+
+
+const rawMetaDescription =
+  meta('meta[name="description"]') ||
+  meta('meta[property="og:description"]') ||
+  meta('meta[name="twitter:description"]') ||
+  null;
+
+const metaDescription =
+  truncateMetaText(
+    rawMetaDescription,
+    160
+  );
+
   /*
    * TITEL
    */
@@ -1492,13 +1565,60 @@ if (availability) {
  * PRODUKTKATEGORIE
  */
 
-const category =
+let category =
   cleanText(
     typeof product?.category === "string"
       ? product.category
       : product?.category?.name
   ) ||
+  meta('meta[property="product:category"]') ||
+  meta('meta[name="product:category"]') ||
+  meta('meta[name="category"]') ||
   null;
+
+
+/*
+ * BREADCRUMB-FALLBACK
+ *
+ * Viele Shops geben die Produktkategorie nur
+ * innerhalb der Breadcrumb-Navigation aus.
+ */
+
+if (!category) {
+  const breadcrumbItems = [];
+
+  $(
+    [
+      'nav[aria-label*="breadcrumb" i] a',
+      '.breadcrumb a',
+      '.breadcrumbs a',
+      '[class*="breadcrumb"] a',
+    ].join(",")
+  ).each((_, element) => {
+    const value =
+      cleanText(
+        $(element).text()
+      );
+
+    if (value) {
+      breadcrumbItems.push(value);
+    }
+  });
+
+  /*
+   * Meist:
+   * Startseite > Kategorie > Produkt
+   *
+   * Deshalb den vorletzten Breadcrumb verwenden.
+   */
+
+  if (breadcrumbItems.length >= 2) {
+    category =
+      breadcrumbItems[
+        breadcrumbItems.length - 2
+      ];
+  }
+}
 
 
 /*
@@ -1553,6 +1673,8 @@ const compareAtPriceSource =
 return {
   title,
   description,
+metaTitle,
+metaDescription,
   price,
   currency,
   images,
@@ -1657,6 +1779,8 @@ console.log("SCRAPER ADDITIONAL PRODUCT DATA:", {
   mpn: product.mpn,
   availability: product.availability,
   category: product.category,
+metaTitle: product.metaTitle,
+metaDescription: product.metaDescription,
   compareAtPrice: product.compareAtPrice,
   compareAtPriceSource: product.compareAtPriceSource,
 });
