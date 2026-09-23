@@ -107,10 +107,15 @@ model MarketplaceProduct {
    * Zusätzliche Produktdaten
    */
 
-  sku         String?
-  gtin        String?
-  mpn         String?
-  category    String?
+  sku      String?
+  gtin     String?
+  mpn      String?
+  category String?
+
+  // Standardisierte Shopify Product Taxonomy
+  shopifyTaxonomyId   String?
+  shopifyTaxonomyName String?
+
   productType String?
   material    String?
   color       String?

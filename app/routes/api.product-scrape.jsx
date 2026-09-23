@@ -1908,7 +1908,8 @@ itemGroupId,
 export async function action({
   request,
 }) {
-  const corsHeaders = {
+  
+const corsHeaders = {
     "Access-Control-Allow-Origin":
       "*",
 
@@ -1969,6 +1970,34 @@ export async function action({
       );
 
 /*
+ * =========================================================
+ * SHOPIFY TAXONOMIE ERKENNEN
+ * =========================================================
+ *
+ * Die Taxonomie wird zunächst nur ermittelt und mit den
+ * Produktdaten zurückgegeben.
+ *
+ * Noch keine Änderung am Shopify-Produkt.
+ */
+
+const {
+  findShopifyTaxonomy,
+} = await import(
+  "../taxonomy.server"
+);
+
+const taxonomy =
+  await findShopifyTaxonomy(
+    product
+  );
+
+product.shopifyTaxonomyId =
+  taxonomy?.id || null;
+
+product.shopifyTaxonomyName =
+  taxonomy?.name || null;
+
+/*
  * TEMPORÄRE DEBUG-AUSGABE
  * Zusätzliche Produktdaten nur im Server-Log anzeigen.
  */
@@ -1991,6 +2020,8 @@ gender: product.gender,
 ageGroup: product.ageGroup,
 adult: product.adult,
 itemGroupId: product.itemGroupId,
+shopifyTaxonomyId: product.shopifyTaxonomyId,
+shopifyTaxonomyName: product.shopifyTaxonomyName,
   compareAtPrice: product.compareAtPrice,
   compareAtPriceSource: product.compareAtPriceSource,
 });
