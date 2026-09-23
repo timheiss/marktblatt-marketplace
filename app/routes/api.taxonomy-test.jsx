@@ -26,7 +26,7 @@ export const loader = async () => {
             taxonomy {
               categories(
                 first: 20
-                search: "Bracelets"
+                search: "Mobile Phones"
               ) {
 nodes {
   id
