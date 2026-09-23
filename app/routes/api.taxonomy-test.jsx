@@ -28,12 +28,17 @@ export const loader = async () => {
                 first: 20
                 search: "Bracelets"
               ) {
-                nodes {
-                  id
-                  name
-                  fullName
-                  isLeaf
-                }
+nodes {
+  id
+  name
+  fullName
+  isLeaf
+
+  attributes {
+    id
+    name
+  }
+}
               }
             }
           }
