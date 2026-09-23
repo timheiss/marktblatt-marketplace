@@ -36,9 +36,10 @@ nodes {
 
 attributes(first: 50) {
   nodes {
+    __typename
+
     ... on TaxonomyAttribute {
       id
-      name
     }
 
     ... on TaxonomyChoiceListAttribute {
