@@ -414,11 +414,86 @@ const compareAtPriceSource =
       ).trim()
     : null;
 
-    const images =
-      prepareImages(
-        product.images
-      );
 
+/*
+ * =====================================================
+ * ZUSÄTZLICHE PRODUKTDATEN
+ * =====================================================
+ */
+
+const optionalText = (value) =>
+  value !== undefined &&
+  value !== null &&
+  value !== ""
+    ? String(value).trim() || null
+    : null;
+
+const sku =
+  optionalText(product.sku);
+
+const gtin =
+  optionalText(product.gtin);
+
+const mpn =
+  optionalText(product.mpn);
+
+const category =
+  optionalText(product.category);
+
+const productType =
+  optionalText(product.productType);
+
+const material =
+  optionalText(product.material);
+
+const color =
+  optionalText(product.color);
+
+const size =
+  optionalText(product.size);
+
+
+/*
+ * SEO / META-DATEN
+ */
+
+const metaTitle =
+  optionalText(product.metaTitle);
+
+const metaDescription =
+  optionalText(product.metaDescription);
+
+
+/*
+ * GOOGLE / MERCHANT PRODUKTDATEN
+ */
+
+const condition =
+  optionalText(product.condition);
+
+const gender =
+  optionalText(product.gender);
+
+const ageGroup =
+  optionalText(product.ageGroup);
+
+const adult =
+  typeof product.adult === "boolean"
+    ? product.adult
+    : null;
+
+const itemGroupId =
+  optionalText(product.itemGroupId);
+
+
+/*
+ * PRODUKTBILDER
+ */
+
+const images =
+  prepareImages(
+    product.images
+  );
 
     /*
      * =====================================================
@@ -454,6 +529,24 @@ brand,
 
 compareAtPrice,
 compareAtPriceSource,
+
+sku,
+gtin,
+mpn,
+category,
+productType,
+material,
+color,
+size,
+
+metaTitle,
+metaDescription,
+
+condition,
+gender,
+ageGroup,
+adult,
+itemGroupId,
 
 sourceUrl,
 images,

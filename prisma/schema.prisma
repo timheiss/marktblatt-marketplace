@@ -104,6 +104,36 @@ model MarketplaceProduct {
   compareAtPriceSource String?
 
   /**
+   * Zusätzliche Produktdaten
+   */
+
+  sku         String?
+  gtin        String?
+  mpn         String?
+  category    String?
+  productType String?
+  material    String?
+  color       String?
+  size        String?
+
+  /**
+   * SEO / Meta-Daten
+   */
+
+  metaTitle       String?
+  metaDescription String?
+
+  /**
+   * Google / Merchant Produktdaten
+   */
+
+  condition   String?
+  gender      String?
+  ageGroup    String?
+  adult       Boolean?
+  itemGroupId String?
+
+  /**
    * Ursprüngliche Produktseite beim Anbieter
    */
 
