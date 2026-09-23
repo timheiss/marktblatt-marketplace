@@ -170,6 +170,73 @@ export const loader = async ({ request }) => {
           brand:
             product.brand,
 
+          /*
+           * Zusätzliche Produktdaten
+           */
+
+          sku:
+            product.sku,
+
+          gtin:
+            product.gtin,
+
+          mpn:
+            product.mpn,
+
+          category:
+            product.category,
+
+          productType:
+            product.productType,
+
+          material:
+            product.material,
+
+          color:
+            product.color,
+
+          size:
+            product.size,
+
+          /*
+           * SEO / Meta-Daten
+           */
+
+          metaTitle:
+            product.metaTitle,
+
+          metaDescription:
+            product.metaDescription,
+
+          /*
+           * Google / Merchant Produktdaten
+           */
+
+          condition:
+            product.condition,
+
+          gender:
+            product.gender,
+
+          ageGroup:
+            product.ageGroup,
+
+          adult:
+            product.adult,
+
+          itemGroupId:
+            product.itemGroupId,
+
+          /*
+           * Streichpreis
+           */
+
+          compareAtPrice:
+            product.compareAtPrice,
+
+          compareAtPriceSource:
+            product.compareAtPriceSource,
+
           sourceUrl:
             product.sourceUrl,
 

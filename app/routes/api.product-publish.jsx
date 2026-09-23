@@ -443,6 +443,39 @@ const validCompareAtPrice =
     ? compareAtPrice
     : null;
 
+/*
+ * =====================================================
+ * ZUSÄTZLICHE SHOPIFY-PRODUKTDATEN
+ * =====================================================
+ */
+
+const sku =
+  product.sku
+    ? String(product.sku).trim()
+    : null;
+
+const barcode =
+  product.gtin
+    ? String(product.gtin).trim()
+    : null;
+
+const productType =
+  product.productType
+    ? String(product.productType).trim()
+    : product.category
+      ? String(product.category).trim()
+      : null;
+
+const metaTitle =
+  product.metaTitle
+    ? String(product.metaTitle).trim()
+    : null;
+
+const metaDescription =
+  product.metaDescription
+    ? String(product.metaDescription).trim()
+    : null;
+
     const currency =
       product.currency
         ? String(
@@ -558,6 +591,43 @@ const validCompareAtPrice =
                   : "",
 
               vendor,
+
+/*
+ * Produkttyp
+ */
+
+...(productType
+  ? {
+      productType,
+    }
+  : {}),
+
+/*
+ * SEO-DATEN
+ */
+
+...(
+  metaTitle ||
+  metaDescription
+    ? {
+        seo: {
+          ...(metaTitle
+            ? {
+                title:
+                  metaTitle,
+              }
+            : {}),
+
+          ...(metaDescription
+            ? {
+                description:
+                  metaDescription,
+              }
+            : {}),
+        },
+      }
+    : {}
+),
 
               /*
                * Anbieterprodukte zunächst immer
@@ -741,10 +811,14 @@ const validCompareAtPrice =
       firstVariant?.price ||
       null;
 
-    if (
-      firstVariant?.id &&
-      price !== null
-    ) {
+if (
+  firstVariant?.id &&
+  (
+    price !== null ||
+    sku !== null ||
+    barcode !== null
+  )
+) {
       const variantResponse =
         await admin.graphql(
           `#graphql
@@ -756,11 +830,13 @@ const validCompareAtPrice =
                 productId: $productId
                 variants: $variants
               ) {
-                productVariants {
+productVariants {
   id
   price
   compareAtPrice
-                }
+  sku
+  barcode
+}
 
                 userErrors {
                   field
@@ -779,10 +855,26 @@ variants: [
     id:
       firstVariant.id,
 
-    price,
+    ...(price !== null
+      ? {
+          price,
+        }
+      : {}),
 
     compareAtPrice:
       validCompareAtPrice,
+
+    ...(sku !== null
+      ? {
+          sku,
+        }
+      : {}),
+
+    ...(barcode !== null
+      ? {
+          barcode,
+        }
+      : {}),
   },
 ],
             },
