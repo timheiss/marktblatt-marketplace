@@ -34,10 +34,24 @@ nodes {
   fullName
   isLeaf
 
-  attributes {
-    id
-    name
+attributes(first: 50) {
+  nodes {
+    ... on TaxonomyAttribute {
+      id
+      name
+    }
+
+    ... on TaxonomyChoiceListAttribute {
+      id
+      name
+    }
+
+    ... on TaxonomyMeasurementAttribute {
+      id
+      name
+    }
   }
+}
 }
               }
             }
