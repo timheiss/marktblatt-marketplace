@@ -42,10 +42,17 @@ attributes(first: 50) {
       id
     }
 
-    ... on TaxonomyChoiceListAttribute {
+... on TaxonomyChoiceListAttribute {
+  id
+  name
+
+  values(first: 100) {
+    nodes {
       id
       name
     }
+  }
+}
 
     ... on TaxonomyMeasurementAttribute {
       id
