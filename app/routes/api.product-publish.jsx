@@ -834,7 +834,6 @@ productVariants {
   id
   price
   compareAtPrice
-  sku
   barcode
 }
 
@@ -864,11 +863,13 @@ variants: [
     compareAtPrice:
       validCompareAtPrice,
 
-    ...(sku !== null
-      ? {
-          sku,
-        }
-      : {}),
+...(sku !== null
+  ? {
+      inventoryItem: {
+        sku,
+      },
+    }
+  : {}),
 
     ...(barcode !== null
       ? {
