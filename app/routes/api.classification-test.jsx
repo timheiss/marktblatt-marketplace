@@ -2,6 +2,10 @@ import {
   classifyProduct,
 } from "../classification.server";
 
+import {
+  findShopifyTaxonomy,
+} from "../taxonomy.server";
+
 
 export const loader = async () => {
   try {
@@ -9,8 +13,6 @@ export const loader = async () => {
      * =====================================================
      * FESTES TESTPRODUKT
      * =====================================================
-     *
-     * Noch keine Verbindung zum echten Scraper.
      */
 
     const product = {
@@ -29,11 +31,29 @@ export const loader = async () => {
 
 
     /*
-     * KI-KLASSIFIZIERUNG
+     * =====================================================
+     * 1. KI-KLASSIFIZIERUNG EINZELN TESTEN
+     * =====================================================
      */
 
     const classification =
       await classifyProduct(
+        product
+      );
+
+
+    /*
+     * =====================================================
+     * 2. KOMPLETTE TAXONOMIE-KETTE TESTEN
+     * =====================================================
+     *
+     * findShopifyTaxonomy() führt intern ebenfalls die
+     * KI-Klassifizierung aus und sucht anschließend
+     * ausschließlich in der echten Shopify-Taxonomie.
+     */
+
+    const taxonomy =
+      await findShopifyTaxonomy(
         product
       );
 
@@ -50,11 +70,13 @@ export const loader = async () => {
       },
 
       classification,
+
+      taxonomy,
     });
 
   } catch (error) {
     console.error(
-      "CLASSIFICATION TEST ERROR:",
+      "CLASSIFICATION TAXONOMY TEST ERROR:",
       error
     );
 
@@ -65,7 +87,7 @@ export const loader = async () => {
         error:
           error instanceof Error
             ? error.message
-            : "Klassifizierung fehlgeschlagen.",
+            : "Klassifizierungs- und Taxonomietest fehlgeschlagen.",
       },
       {
         status: 500,

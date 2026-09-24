@@ -1,5 +1,6 @@
 import { unauthenticated } from "./shopify.server";
 
+import { classifyProduct } from "./classification.server";
 
 /*
  * =========================================================
@@ -45,12 +46,29 @@ function normalizeText(value) {
  * =========================================================
  */
 
-function buildSearchTerms(product) {
+function buildSearchTerms(
+  product,
+  aiClassification = null
+) {
   const terms = [];
 
   /*
-   * Bereits erkannte Kategorie ist normalerweise
-   * unser stärkstes Signal.
+   * KI-Klassifizierung zuerst.
+   *
+   * Beispiel:
+   * "Armbänder" -> "Bracelets"
+   *
+   * Dadurch kann die Shopify-Taxonomie mit einem
+   * präzisen englischen Produkttyp durchsucht werden.
+   */
+
+  if (aiClassification) {
+    terms.push(aiClassification);
+  }
+
+  /*
+   * Danach die direkt von der Produktseite
+   * erkannte Kategorie.
    */
 
   if (product?.category) {
@@ -66,26 +84,24 @@ function buildSearchTerms(product) {
   }
 
   /*
-   * Anschließend Produkttitel.
+   * Produkttitel als letzter Fallback.
    */
 
   if (product?.title) {
     terms.push(product.title);
   }
 
-  /*
-   * Doppelte Begriffe entfernen.
-   */
-
   return [
     ...new Set(
       terms
-        .map((value) => String(value).trim())
+        .map(
+          (value) =>
+            String(value).trim()
+        )
         .filter(Boolean)
     ),
   ];
 }
-
 
 /*
  * =========================================================
@@ -274,12 +290,48 @@ export async function findShopifyTaxonomy(product) {
     }
 
 
-    const searchTerms =
-      buildSearchTerms(product);
+    /*
+ * =========================================================
+ * KI-KLASSIFIZIERUNG
+ * =========================================================
+ *
+ * Die KI liefert nur einen englischen Produkttyp.
+ * Eine Shopify-ID darf ausschließlich aus der
+ * Shopify Taxonomy API stammen.
+ */
 
-    if (!searchTerms.length) {
-      return null;
-    }
+let aiClassification = null;
+
+try {
+  aiClassification =
+    await classifyProduct(product);
+} catch (error) {
+  console.error(
+    "AI TAXONOMY CLASSIFICATION ERROR:",
+    error
+  );
+
+  /*
+   * Wichtig:
+   * Fällt OpenAI aus, arbeitet unser bisheriger
+   * Taxonomy-Matcher trotzdem weiter.
+   */
+}
+
+
+/*
+ * Suchbegriffe aufbauen.
+ */
+
+const searchTerms =
+  buildSearchTerms(
+    product,
+    aiClassification
+  );
+
+if (!searchTerms.length) {
+  return null;
+}
 
 
     const { admin } =
@@ -301,7 +353,7 @@ export async function findShopifyTaxonomy(product) {
 
     for (
       const searchTerm of
-      searchTerms.slice(0, 3)
+      searchTerms.slice(0, 4)
     ) {
       try {
         const results =
@@ -395,6 +447,9 @@ export async function findShopifyTaxonomy(product) {
 
         productType:
           product?.productType,
+
+aiClassification:
+  aiClassification,
 
         taxonomyId:
           best.id,

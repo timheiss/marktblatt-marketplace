@@ -104,15 +104,6 @@ body: JSON.stringify({
   const result =
     await response.json();
 
-console.log(
-  "OPENAI RAW RESPONSE:",
-  JSON.stringify(
-    result,
-    null,
-    2
-  )
-);
-
   if (!response.ok) {
     console.error(
       "OPENAI CLASSIFICATION ERROR:",
