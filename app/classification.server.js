@@ -87,7 +87,7 @@ ${description}
           input,
 
           max_output_tokens:
-            30,
+            100,
         }),
       }
     );
@@ -96,6 +96,14 @@ ${description}
   const result =
     await response.json();
 
+console.log(
+  "OPENAI RAW RESPONSE:",
+  JSON.stringify(
+    result,
+    null,
+    2
+  )
+);
 
   if (!response.ok) {
     console.error(
