@@ -80,15 +80,23 @@ ${description}
             `Bearer ${apiKey}`,
         },
 
-        body: JSON.stringify({
-          model:
-            "gpt-5.6-luna",
+body: JSON.stringify({
+  model:
+    "gpt-5.6-luna",
 
-          input,
+  input,
 
-          max_output_tokens:
-            100,
-        }),
+  reasoning: {
+    effort: "low",
+  },
+
+  text: {
+    verbosity: "low",
+  },
+
+  max_output_tokens:
+    200,
+}),
       }
     );
 
