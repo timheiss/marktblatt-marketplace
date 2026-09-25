@@ -222,6 +222,248 @@ if (
   return score;
 }
 
+/*
+ * =========================================================
+ * MEHRDEUTIGE SHOPIFY-KATEGORIEN ERKENNEN
+ * =========================================================
+ *
+ * Wenn mehrere Shopify-Kategorien denselben Namen haben,
+ * reicht der Kategoriename allein nicht aus.
+ *
+ * Beispiel:
+ *
+ * Socks
+ * -> normale Bekleidung
+ * -> Sports Collectibles
+ *
+ * In diesem Fall lassen wir die KI anhand des vollständigen
+ * Shopify-Pfads entscheiden.
+ */
+
+async function chooseBestTaxonomyCandidate(
+  product,
+  candidates,
+  aiClassification
+) {
+  if (!Array.isArray(candidates) || !candidates.length) {
+    return null;
+  }
+
+  /*
+   * Zunächst Kandidaten mit dem höchsten normalen
+   * Score bestimmen.
+   */
+
+  const highestScore =
+    Math.max(
+      ...candidates.map(
+        (candidate) =>
+          candidate.score || 0
+      )
+    );
+
+  const topCandidates =
+    candidates.filter(
+      (candidate) =>
+        candidate.score === highestScore
+    );
+
+
+  /*
+   * Eindeutiger Gewinner:
+   * keine zusätzliche KI-Abfrage notwendig.
+   */
+
+  if (topCandidates.length === 1) {
+    return topCandidates[0];
+  }
+
+
+  /*
+   * Nur bei einem echten Gleichstand lassen wir die KI
+   * zwischen den offiziellen Shopify-Pfaden entscheiden.
+   */
+
+  const apiKey =
+    process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    return topCandidates[0];
+  }
+
+
+  const candidateText =
+    topCandidates
+      .map(
+        (candidate, index) =>
+          `${index + 1}. ${candidate.id} | ${candidate.fullName}`
+      )
+      .join("\n");
+
+
+  const input = `
+Choose the single best Shopify Standard Product Taxonomy category for this ecommerce product.
+
+You MUST choose only one category from the candidate list below.
+
+Return ONLY the exact Shopify category ID.
+Do not return explanations.
+Do not invent an ID.
+
+Product title:
+${String(product?.title || "")}
+
+Source category:
+${String(product?.category || "")}
+
+Source product type:
+${String(product?.productType || "")}
+
+AI product classification:
+${String(aiClassification || "")}
+
+Description:
+${String(product?.description || "").slice(0, 1500)}
+
+Candidate Shopify categories:
+${candidateText}
+`.trim();
+
+
+  try {
+    const response =
+      await fetch(
+        "https://api.openai.com/v1/responses",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Authorization:
+              `Bearer ${apiKey}`,
+          },
+
+          body: JSON.stringify({
+            model:
+              "gpt-5.6-luna",
+
+            input,
+
+            reasoning: {
+              effort: "low",
+            },
+
+            text: {
+              verbosity: "low",
+            },
+
+            max_output_tokens:
+              200,
+          }),
+        }
+      );
+
+
+    const result =
+      await response.json();
+
+
+    if (!response.ok) {
+      console.error(
+        "TAXONOMY DISAMBIGUATION AI ERROR:",
+        result
+      );
+
+      return topCandidates[0];
+    }
+
+
+    const selectedId =
+      result?.output
+        ?.flatMap(
+          (item) =>
+            item?.content || []
+        )
+        ?.find(
+          (item) =>
+            item?.type ===
+            "output_text"
+        )
+        ?.text
+        ?.trim() ||
+      null;
+
+
+    /*
+     * Sicherheitsprüfung:
+     *
+     * Die KI darf ausschließlich eine ID verwenden,
+     * die Shopify vorher geliefert hat.
+     */
+
+    const selected =
+      topCandidates.find(
+        (candidate) =>
+          candidate.id === selectedId
+      ) || null;
+
+
+    if (!selected) {
+      console.warn(
+        "TAXONOMY DISAMBIGUATION INVALID RESULT:",
+        selectedId
+      );
+
+      return topCandidates[0];
+    }
+
+
+    console.log(
+      "SHOPIFY TAXONOMY DISAMBIGUATION:",
+      {
+        title:
+          product?.title,
+
+        aiClassification,
+
+        candidates:
+          topCandidates.map(
+            (candidate) => ({
+              id:
+                candidate.id,
+
+              fullName:
+                candidate.fullName,
+
+              score:
+                candidate.score,
+            })
+          ),
+
+        selected: {
+          id:
+            selected.id,
+
+          fullName:
+            selected.fullName,
+        },
+      }
+    );
+
+
+    return selected;
+
+  } catch (error) {
+    console.error(
+      "TAXONOMY DISAMBIGUATION ERROR:",
+      error
+    );
+
+    return topCandidates[0];
+  }
+}
 
 /*
  * =========================================================
@@ -421,8 +663,12 @@ if (!searchTerms.length) {
     );
 
 
-    const best =
-      candidates[0];
+const best =
+  await chooseBestTaxonomyCandidate(
+    product,
+    candidates,
+    aiClassification
+  );
 
 
     /*
