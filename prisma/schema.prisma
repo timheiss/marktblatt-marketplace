@@ -112,11 +112,26 @@ model MarketplaceProduct {
   mpn      String?
   category String?
 
-  // Standardisierte Shopify Product Taxonomy
-  shopifyTaxonomyId   String?
-  shopifyTaxonomyName String?
+// Standardisierte Shopify Product Taxonomy
+shopifyTaxonomyId   String?
+shopifyTaxonomyName String?
 
-  productType String?
+// Offizielle, validierte Shopify-Kategorieattribute.
+// Beispiel:
+// [
+//   {
+//     "attributeName": "Color",
+//     "values": [
+//       {
+//         "id": "gid://shopify/TaxonomyValue/4",
+//         "name": "Gold"
+//       }
+//     ]
+//   }
+// ]
+shopifyTaxonomyAttributes Json?
+
+productType String?
   material    String?
   color       String?
   size        String?

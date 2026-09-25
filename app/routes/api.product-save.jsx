@@ -503,6 +503,21 @@ const shopifyTaxonomyName =
   );
 
 /*
+ * Validierte Shopify-Kategorieattribute.
+ *
+ * Nur Arrays übernehmen. Falls keine Attribute
+ * vorhanden sind, speichern wir null.
+ */
+
+const shopifyTaxonomyAttributes =
+  Array.isArray(
+    product.shopifyTaxonomyAttributes
+  ) &&
+  product.shopifyTaxonomyAttributes.length
+    ? product.shopifyTaxonomyAttributes
+    : null;
+
+/*
  * PRODUKTBILDER
  */
 
@@ -566,6 +581,7 @@ itemGroupId,
 
 shopifyTaxonomyId,
 shopifyTaxonomyName,
+shopifyTaxonomyAttributes,
 
 sourceUrl,
 images,
