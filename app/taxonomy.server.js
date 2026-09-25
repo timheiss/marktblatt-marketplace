@@ -1,6 +1,9 @@
 import { unauthenticated } from "./shopify.server";
 
-import { classifyProduct } from "./classification.server";
+import {
+  classifyProduct,
+  classifyProductSearchTerms,
+} from "./classification.server";
 
 /*
  * =========================================================
@@ -48,48 +51,82 @@ function normalizeText(value) {
 
 function buildSearchTerms(
   product,
-  aiClassification = null
+  aiClassification = null,
+  aiSearchTerms = null
 ) {
   const terms = [];
 
   /*
-   * KI-Klassifizierung zuerst.
+   * Strukturierte KI-Suchbegriffe zuerst.
    *
-   * Beispiel:
-   * "Armbänder" -> "Bracelets"
-   *
-   * Dadurch kann die Shopify-Taxonomie mit einem
-   * präzisen englischen Produkttyp durchsucht werden.
+   * Reihenfolge:
+   * 1. präziser Begriff
+   * 2. breiterer Oberbegriff
+   * 3. alternative Taxonomiebezeichnung
+   */
+
+  if (aiSearchTerms?.primary) {
+    terms.push(
+      aiSearchTerms.primary
+    );
+  }
+
+  if (aiSearchTerms?.broader) {
+    terms.push(
+      aiSearchTerms.broader
+    );
+  }
+
+  if (aiSearchTerms?.alternative) {
+    terms.push(
+      aiSearchTerms.alternative
+    );
+  }
+
+
+  /*
+   * Bisherige einzelne KI-Klassifizierung
+   * als zusätzlicher Fallback.
    */
 
   if (aiClassification) {
-    terms.push(aiClassification);
+    terms.push(
+      aiClassification
+    );
   }
 
+
   /*
-   * Danach die direkt von der Produktseite
-   * erkannte Kategorie.
+   * Direkt von der Produktseite erkannte Daten.
    */
 
   if (product?.category) {
-    terms.push(product.category);
+    terms.push(
+      product.category
+    );
   }
-
-  /*
-   * Danach Produkttyp.
-   */
 
   if (product?.productType) {
-    terms.push(product.productType);
+    terms.push(
+      product.productType
+    );
   }
+
 
   /*
    * Produkttitel als letzter Fallback.
    */
 
   if (product?.title) {
-    terms.push(product.title);
+    terms.push(
+      product.title
+    );
   }
+
+
+  /*
+   * Leere und doppelte Begriffe entfernen.
+   */
 
   return [
     ...new Set(
@@ -602,6 +639,31 @@ try {
    */
 }
 
+/*
+ * =========================================================
+ * ERWEITERTE TAXONOMIE-SUCHBEGRIFFE
+ * =========================================================
+ */
+
+let aiSearchTerms = null;
+
+try {
+  aiSearchTerms =
+    await classifyProductSearchTerms(
+      product
+    );
+} catch (error) {
+  console.error(
+    "AI TAXONOMY SEARCH TERMS ERROR:",
+    error
+  );
+
+  /*
+   * Kein Abbruch:
+   * Die bisherige Klassifizierung und die
+   * Produktdaten bleiben als Fallback erhalten.
+   */
+}
 
 /*
  * Suchbegriffe aufbauen.
@@ -610,7 +672,8 @@ try {
 const searchTerms =
   buildSearchTerms(
     product,
-    aiClassification
+    aiClassification,
+    aiSearchTerms
   );
 
 if (!searchTerms.length) {
@@ -637,7 +700,7 @@ if (!searchTerms.length) {
 
     for (
       const searchTerm of
-      searchTerms.slice(0, 4)
+      searchTerms.slice(0, 7)
     ) {
       try {
         const results =
@@ -778,6 +841,8 @@ aiClassification:
     return null;
   }
 }
+
+
 /*
  * =========================================================
  * SHOPIFY TAXONOMIE-ATTRIBUTE LADEN
