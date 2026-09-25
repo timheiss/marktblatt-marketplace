@@ -494,3 +494,143 @@ aiClassification:
     return null;
   }
 }
+/*
+ * =========================================================
+ * SHOPIFY TAXONOMIE-ATTRIBUTE LADEN
+ * =========================================================
+ *
+ * Lädt zu einer bereits bekannten Shopify-Kategorie
+ * die offiziellen Attribute und erlaubten Werte.
+ *
+ * Beispiel:
+ * Bracelets -> Color, Target gender, Jewelry material,
+ * Bracelet design usw.
+ */
+
+export async function getShopifyTaxonomyAttributes(
+  taxonomyId
+) {
+  try {
+    if (!taxonomyId) {
+      return null;
+    }
+
+    const marktblattShop =
+      process.env.MARKTBLATT_SHOP;
+
+    if (!marktblattShop) {
+      throw new Error(
+        "MARKTBLATT_SHOP ist nicht konfiguriert."
+      );
+    }
+
+    const { admin } =
+      await unauthenticated.admin(
+        marktblattShop
+      );
+
+
+    /*
+     * Die Taxonomy API bietet hier keine einfache
+     * category(id: ...) Abfrage.
+     *
+     * Deshalb suchen wir die Kategorien und wählen
+     * anschließend exakt anhand der Shopify-ID aus.
+     */
+
+    const response =
+      await admin.graphql(
+        `#graphql
+          query TaxonomyAttributes(
+            $search: String!
+          ) {
+            taxonomy {
+              categories(
+                first: 20
+                search: $search
+              ) {
+                nodes {
+                  id
+                  name
+                  fullName
+                  isLeaf
+
+                  attributes(first: 50) {
+                    nodes {
+                      __typename
+
+                      ... on TaxonomyAttribute {
+                        id
+                      }
+
+                      ... on TaxonomyChoiceListAttribute {
+                        id
+                        name
+
+                        values(first: 100) {
+                          nodes {
+                            id
+                            name
+                          }
+                        }
+                      }
+
+                      ... on TaxonomyMeasurementAttribute {
+                        id
+                        name
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        `,
+        {
+          variables: {
+            /*
+             * Die konkrete Suche setzen wir unten
+             * über den Kategorienamen.
+             */
+            search: "Bracelets",
+          },
+        }
+      );
+
+    const result =
+      await response.json();
+
+    if (result?.errors?.length) {
+      throw new Error(
+        result.errors
+          .map(
+            (error) =>
+              error.message
+          )
+          .join(", ")
+      );
+    }
+
+    const categories =
+      result?.data
+        ?.taxonomy
+        ?.categories
+        ?.nodes || [];
+
+    const category =
+      categories.find(
+        (item) =>
+          item.id === taxonomyId
+      ) || null;
+
+    return category;
+
+  } catch (error) {
+    console.error(
+      "SHOPIFY TAXONOMY ATTRIBUTES ERROR:",
+      error
+    );
+
+    return null;
+  }
+}
