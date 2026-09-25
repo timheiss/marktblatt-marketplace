@@ -1,5 +1,6 @@
 import {
   classifyProduct,
+  classifyProductSearchTerms,
 } from "../classification.server";
 
 import {
@@ -15,18 +16,19 @@ export const loader = async () => {
      * =====================================================
      */
 
-    const product = {
-      title:
-        "Kordelarmband 18K Gold Damen",
+const product = {
+  title:
+    "Scrunchie | Classic - Haargummi - versch. Farben - FE-HO",
 
-      category:
-        "Armbänder",
+  category:
+    null,
 
-      productType:
-        null,
+  productType:
+    null,
 
-      description:
-        "18K vergoldetes Kordelarmband aus Edelstahl mit 6 mm Breite. Verstellbar von 18 bis 23 cm, wasserfest und mit Anlaufschutz.",
+  description:
+    "Elegantes Satin-Scrunchie mit 60 mm Durchmesser. Haarschonend, elastisch und als Haaraccessoire für Damen geeignet.",
+};
     };
 
 
@@ -41,6 +43,10 @@ export const loader = async () => {
         product
       );
 
+const searchTerms =
+  await classifyProductSearchTerms(
+    product
+  );
 
     /*
      * =====================================================
@@ -70,6 +76,7 @@ export const loader = async () => {
       },
 
       classification,
+searchTerms,
 
       taxonomy,
     });
