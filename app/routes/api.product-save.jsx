@@ -485,6 +485,22 @@ const adult =
 const itemGroupId =
   optionalText(product.itemGroupId);
 
+/*
+ * SHOPIFY PRODUKT-TAXONOMIE
+ *
+ * Diese Werte wurden zuvor vom Scraper über die
+ * Shopify Standard Product Taxonomy ermittelt.
+ */
+
+const shopifyTaxonomyId =
+  optionalText(
+    product.shopifyTaxonomyId
+  );
+
+const shopifyTaxonomyName =
+  optionalText(
+    product.shopifyTaxonomyName
+  );
 
 /*
  * PRODUKTBILDER
@@ -548,10 +564,13 @@ ageGroup,
 adult,
 itemGroupId,
 
+shopifyTaxonomyId,
+shopifyTaxonomyName,
+
 sourceUrl,
 images,
 
-          status: "draft",
+status: "draft",
 
           shopifyProductId: null,
           shopifyVariantId: null,
