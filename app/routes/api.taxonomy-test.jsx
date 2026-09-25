@@ -22,64 +22,83 @@ export const loader = async () => {
 
     /*
      * =====================================================
-     * TESTPRODUKT OHNE KATEGORIE ERSTELLEN
+     * SHOPIFY TAXONOMIE-KATEGORIE TESTEN
      * =====================================================
+     *
+     * Bereits bestätigte Kategorie:
+     *
+     * Bracelets
+     * gid://shopify/TaxonomyCategory/aa-6-3
      */
 
-    const createResponse =
+    const response =
       await admin.graphql(
         `#graphql
-          mutation TaxonomySuggestionTest {
-            productCreate(
-              product: {
-                title: "Kordelarmband 18K Gold Damen"
-                descriptionHtml: """
-                  <p>
-                    18K vergoldetes Kordelarmband aus Edelstahl
-                    mit 6 mm Breite. Verstellbar von 18 bis 23 cm,
-                    wasserfest und mit Anlaufschutz.
-                  </p>
-                """
-                vendor: "Marktblatt Taxonomy Test"
-                status: DRAFT
-              }
-            ) {
-              product {
-                id
-                title
-                status
-
-                category {
+          query TaxonomyAttributeTest {
+            taxonomy {
+              categories(
+                first: 10
+                search: "Bracelets"
+              ) {
+                nodes {
                   id
                   name
                   fullName
-                }
-              }
+                  isLeaf
 
-              userErrors {
-                field
-                message
+                  attributes(first: 50) {
+                    nodes {
+                      __typename
+
+                      ... on TaxonomyAttribute {
+                        id
+                      }
+
+                      ... on TaxonomyChoiceListAttribute {
+                        id
+                        name
+
+                        values(first: 100) {
+                          nodes {
+                            id
+                            name
+                          }
+                        }
+                      }
+
+                      ... on TaxonomyMeasurementAttribute {
+                        id
+                        name
+                      }
+                    }
+                  }
+                }
               }
             }
           }
         `
       );
 
-    const createResult =
-      await createResponse.json();
+    const result =
+      await response.json();
 
 
     /*
+     * =====================================================
      * GRAPHQL-FEHLER
+     * =====================================================
      */
 
-    if (createResult?.errors?.length) {
+    if (result?.errors?.length) {
+      console.error(
+        "SHOPIFY TAXONOMY ATTRIBUTE ERRORS:",
+        result.errors
+      );
+
       return Response.json(
         {
           success: false,
-          stage: "productCreate",
-          errors:
-            createResult.errors,
+          errors: result.errors,
         },
         {
           status: 500,
@@ -88,77 +107,30 @@ export const loader = async () => {
     }
 
 
-    const userErrors =
-      createResult?.data
-        ?.productCreate
-        ?.userErrors || [];
-
-    if (userErrors.length) {
-      return Response.json(
-        {
-          success: false,
-          stage: "productCreate",
-          userErrors,
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-
-    const product =
-      createResult?.data
-        ?.productCreate
-        ?.product;
-
-    if (!product?.id) {
-      throw new Error(
-        "Shopify hat kein Testprodukt zurückgegeben."
-      );
-    }
-
-
     /*
      * =====================================================
-     * PRODUKT DIREKT NOCH EINMAL ABFRAGEN
+     * NUR BRACELETS AUSWÄHLEN
      * =====================================================
      */
 
-    const checkResponse =
-      await admin.graphql(
-        `#graphql
-          query CheckTaxonomySuggestion(
-            $id: ID!
-          ) {
-            product(id: $id) {
-              id
-              title
-              status
+    const categories =
+      result?.data
+        ?.taxonomy
+        ?.categories
+        ?.nodes || [];
 
-              category {
-                id
-                name
-                fullName
-              }
-            }
-          }
-        `,
-        {
-          variables: {
-            id: product.id,
-          },
-        }
-      );
-
-    const checkResult =
-      await checkResponse.json();
+    const bracelets =
+      categories.find(
+        (category) =>
+          category.id ===
+          "gid://shopify/TaxonomyCategory/aa-6-3"
+      ) || null;
 
 
     console.log(
-      "SHOPIFY CATEGORY SUGGESTION TEST:",
+      "SHOPIFY BRACELETS ATTRIBUTES:",
       JSON.stringify(
-        checkResult,
+        bracelets,
         null,
         2
       )
@@ -167,26 +139,12 @@ export const loader = async () => {
 
     return Response.json({
       success: true,
-
-      /*
-       * Das Produkt bleibt absichtlich als DRAFT bestehen.
-       * So können wir es zusätzlich im Shopify-Admin prüfen.
-       */
-
-      createdProduct:
-        product,
-
-      checkedProduct:
-        checkResult?.data?.product ||
-        null,
-
-      instruction:
-        "Das DRAFT-Testprodukt im Shopify-Admin öffnen und prüfen, ob Shopify bei Kategorie einen Vorschlag anzeigt.",
+      category: bracelets,
     });
 
   } catch (error) {
     console.error(
-      "SHOPIFY CATEGORY SUGGESTION TEST ERROR:",
+      "SHOPIFY TAXONOMY ATTRIBUTE TEST ERROR:",
       error
     );
 
@@ -197,7 +155,7 @@ export const loader = async () => {
         error:
           error instanceof Error
             ? error.message
-            : "Test konnte nicht durchgeführt werden.",
+            : "Taxonomieattribute konnten nicht geladen werden.",
       },
       {
         status: 500,
