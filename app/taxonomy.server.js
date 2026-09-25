@@ -249,6 +249,43 @@ async function chooseBestTaxonomyCandidate(
     return null;
   }
 
+/*
+ * Wenn Shopify mehrere Kategorien mit exakt demselben
+ * Namen wie die KI-Klassifizierung liefert, müssen wir
+ * diese anhand ihres vollständigen Taxonomiepfads
+ * unterscheiden.
+ *
+ * Beispiel:
+ *
+ * Socks
+ * -> Apparel & Accessories > ... > Socks
+ * -> Sports Collectibles > ... > Socks
+ */
+
+const normalizedClassification =
+  normalizeText(aiClassification);
+
+const exactNameCandidates =
+  normalizedClassification
+    ? candidates.filter(
+        (candidate) =>
+          normalizeText(candidate?.name) ===
+          normalizedClassification
+      )
+    : [];
+
+
+/*
+ * Mehrere gleichnamige Kategorien:
+ * Nur diese Kandidaten gehen in die semantische
+ * Pfadauswahl.
+ */
+
+let candidatesToEvaluate =
+  exactNameCandidates.length > 1
+    ? exactNameCandidates
+    : null;
+
   /*
    * Zunächst Kandidaten mit dem höchsten normalen
    * Score bestimmen.
@@ -262,11 +299,12 @@ async function chooseBestTaxonomyCandidate(
       )
     );
 
-  const topCandidates =
-    candidates.filter(
-      (candidate) =>
-        candidate.score === highestScore
-    );
+const topCandidates =
+  candidatesToEvaluate ||
+  candidates.filter(
+    (candidate) =>
+      candidate.score === highestScore
+  );
 
 
   /*
