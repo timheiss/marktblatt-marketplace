@@ -466,6 +466,20 @@ const productType =
       ? String(product.category).trim()
       : null;
 
+/*
+ * Shopify Standard Product Taxonomy
+ *
+ * Die ID wurde bereits beim Scrapen ermittelt und
+ * serverseitig in PostgreSQL gespeichert.
+ */
+
+const shopifyTaxonomyId =
+  product.shopifyTaxonomyId
+    ? String(
+        product.shopifyTaxonomyId
+      ).trim()
+    : null;
+
 const metaTitle =
   product.metaTitle
     ? String(product.metaTitle).trim()
@@ -599,6 +613,17 @@ const metaDescription =
 ...(productType
   ? {
       productType,
+    }
+  : {}),
+
+/*
+ * Shopify Produktkategorie
+ */
+
+...(shopifyTaxonomyId
+  ? {
+      category:
+        shopifyTaxonomyId,
     }
   : {}),
 
