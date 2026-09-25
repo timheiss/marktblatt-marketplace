@@ -29,7 +29,6 @@ const product = {
   description:
     "Elegantes Satin-Scrunchie mit 60 mm Durchmesser. Haarschonend, elastisch und als Haaraccessoire für Damen geeignet.",
 };
-    };
 
 
     /*
