@@ -1998,6 +1998,79 @@ product.shopifyTaxonomyName =
   taxonomy?.name || null;
 
 /*
+ * =========================================================
+ * SHOPIFY TAXONOMIE-ATTRIBUTE ERKENNEN
+ * =========================================================
+ *
+ * Nachdem die Produktkategorie feststeht, werden die
+ * offiziellen Attribute und erlaubten Werte dieser
+ * Shopify-Kategorie geladen.
+ *
+ * Die KI darf anschließend ausschließlich aus diesen
+ * Shopify-Werten auswählen.
+ */
+
+product.shopifyTaxonomyAttributes = [];
+
+if (
+  taxonomy?.id &&
+  taxonomy?.name
+) {
+  try {
+    const {
+      getShopifyTaxonomyAttributes,
+    } = await import(
+      "../taxonomy.server"
+    );
+
+    const {
+      classifyProductAttributes,
+    } = await import(
+      "../attribute-classification.server"
+    );
+
+
+    /*
+     * Offizielle Attribute und Werte für die
+     * erkannte Shopify-Kategorie laden.
+     */
+
+    const taxonomyWithAttributes =
+      await getShopifyTaxonomyAttributes(
+        taxonomy.id,
+        taxonomy.name
+      );
+
+
+    /*
+     * Passende Werte anhand der tatsächlichen
+     * Produktdaten auswählen.
+     */
+
+    if (taxonomyWithAttributes) {
+      product.shopifyTaxonomyAttributes =
+        await classifyProductAttributes(
+          product,
+          taxonomyWithAttributes
+        );
+    }
+
+  } catch (error) {
+    /*
+     * Ein Fehler bei der Attributerkennung darf
+     * niemals den normalen Produktscraper stoppen.
+     */
+
+    console.error(
+      "SHOPIFY TAXONOMY ATTRIBUTE CLASSIFICATION ERROR:",
+      error
+    );
+
+    product.shopifyTaxonomyAttributes = [];
+  }
+}
+
+/*
  * TEMPORÄRE DEBUG-AUSGABE
  * Zusätzliche Produktdaten nur im Server-Log anzeigen.
  */
@@ -2022,6 +2095,8 @@ adult: product.adult,
 itemGroupId: product.itemGroupId,
 shopifyTaxonomyId: product.shopifyTaxonomyId,
 shopifyTaxonomyName: product.shopifyTaxonomyName,
+shopifyTaxonomyAttributes:
+  product.shopifyTaxonomyAttributes,
   compareAtPrice: product.compareAtPrice,
   compareAtPriceSource: product.compareAtPriceSource,
 });
