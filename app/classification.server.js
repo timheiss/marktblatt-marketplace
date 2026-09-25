@@ -41,16 +41,23 @@ export async function classifyProduct(product) {
 
 
   const input = `
-Classify this ecommerce product.
+Classify this ecommerce product for the Shopify Standard Product Taxonomy.
 
-Return only the most precise common English product category name.
+Return only one concise English product category search term.
 
-The result will be used to search the Shopify Standard Product Taxonomy.
+Prefer the standard general product category over a more specific product style or design.
+
+Examples:
+Kordelarmband -> Bracelets
+Goldarmband -> Bracelets
+Smartphone -> Mobile Phones
+Handtasche -> Handbags
+Akkuschrauber -> Drills
 
 Do not return explanations.
 Do not return a Shopify ID.
 Do not return JSON.
-Do not invent product properties.
+Do not include materials, styles, colors, gender, or other product attributes.
 
 Product title:
 ${title}

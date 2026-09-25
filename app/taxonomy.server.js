@@ -203,16 +203,20 @@ function scoreCategory(category, product, searchTerm) {
   }
 
 
-  /*
-   * Leaf-Kategorien bevorzugen.
-   *
-   * Das ist wichtig, weil wir möglichst die konkrete
-   * Produktkategorie und nicht nur einen Oberbegriff wollen.
-   */
+/*
+ * Leaf-Kategorien nur bevorzugen, wenn bereits
+ * eine echte textliche Übereinstimmung besteht.
+ *
+ * Ein fremder Treffer wie "Chain Cutters" darf
+ * nicht allein wegen isLeaf Punkte erhalten.
+ */
 
-  if (category?.isLeaf) {
-    score += 20;
-  }
+if (
+  category?.isLeaf &&
+  score > 0
+) {
+  score += 20;
+}
 
 
   return score;
