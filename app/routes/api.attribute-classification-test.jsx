@@ -46,10 +46,11 @@ export const loader = async () => {
      * =====================================================
      */
 
-    const taxonomy =
-      await getShopifyTaxonomyAttributes(
-        taxonomyId
-      );
+const taxonomy =
+  await getShopifyTaxonomyAttributes(
+    taxonomyId,
+    "Bracelets"
+  );
 
     if (!taxonomy) {
       throw new Error(

@@ -508,12 +508,17 @@ aiClassification:
  */
 
 export async function getShopifyTaxonomyAttributes(
-  taxonomyId
+  taxonomyId,
+  taxonomyName
 ) {
+
   try {
-    if (!taxonomyId) {
-      return null;
-    }
+if (
+  !taxonomyId ||
+  !taxonomyName
+) {
+  return null;
+}
 
     const marktblattShop =
       process.env.MARKTBLATT_SHOP;
@@ -587,13 +592,10 @@ export async function getShopifyTaxonomyAttributes(
           }
         `,
         {
-          variables: {
-            /*
-             * Die konkrete Suche setzen wir unten
-             * über den Kategorienamen.
-             */
-            search: "Bracelets",
-          },
+variables: {
+  search:
+    String(taxonomyName).trim(),
+},
         }
       );
 
