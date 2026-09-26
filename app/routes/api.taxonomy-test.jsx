@@ -126,6 +126,67 @@ export const loader = async () => {
           "gid://shopify/TaxonomyCategory/aa-6-3"
       ) || null;
 
+/*
+ * =========================================================
+ * SHOPIFY CATEGORY-METAFIELD-DEFINITIONEN
+ * =========================================================
+ *
+ * Nur lesen - es wird nichts in Shopify verändert.
+ */
+
+const definitionsResponse =
+  await admin.graphql(
+    `#graphql
+      query CategoryMetafieldDefinitions {
+        metafieldDefinitions(
+          ownerType: PRODUCT
+          first: 100
+        ) {
+          nodes {
+            id
+            name
+            namespace
+            key
+
+            type {
+              name
+            }
+
+            validations {
+              name
+              value
+            }
+          }
+        }
+      }
+    `
+  );
+
+const definitionsResult =
+  await definitionsResponse.json();
+
+if (definitionsResult?.errors?.length) {
+  console.error(
+    "SHOPIFY METAFIELD DEFINITION ERRORS:",
+    definitionsResult.errors
+  );
+
+  return Response.json(
+    {
+      success: false,
+      stage: "metafieldDefinitions",
+      errors: definitionsResult.errors,
+    },
+    {
+      status: 500,
+    }
+  );
+}
+
+const metafieldDefinitions =
+  definitionsResult?.data
+    ?.metafieldDefinitions
+    ?.nodes || [];
 
     console.log(
       "SHOPIFY BRACELETS ATTRIBUTES:",
@@ -137,10 +198,11 @@ export const loader = async () => {
     );
 
 
-    return Response.json({
-      success: true,
-      category: bracelets,
-    });
+return Response.json({
+  success: true,
+  category: bracelets,
+  metafieldDefinitions,
+});
 
   } catch (error) {
     console.error(
