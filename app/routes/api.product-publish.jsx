@@ -218,6 +218,212 @@ function parseShopifyTaxonomyAttributes(value) {
 
 /*
  * =========================================================
+ * SHOPIFY STANDARD-METAOBJECT SUCHEN
+ * =========================================================
+ *
+ * Ein Shopify-Taxonomie-Wert wird über das Feld
+ * "taxonomy_reference" mit einem Standard-Metaobject
+ * verbunden.
+ */
+
+async function findShopifyTaxonomyMetaobject(
+  admin,
+  metaobjectType,
+  taxonomyValueId
+) {
+  if (
+    !admin ||
+    !metaobjectType ||
+    !taxonomyValueId
+  ) {
+    return null;
+  }
+
+  const response =
+    await admin.graphql(
+      `#graphql
+        query FindTaxonomyMetaobject(
+          $type: String!
+        ) {
+          metaobjects(
+            type: $type
+            first: 100
+          ) {
+            nodes {
+              id
+              handle
+              type
+              displayName
+
+              taxonomyReference:
+                field(
+                  key: "taxonomy_reference"
+                ) {
+                  value
+                }
+            }
+          }
+        }
+      `,
+      {
+        variables: {
+          type: metaobjectType,
+        },
+      }
+    );
+
+  const result =
+    await response.json();
+
+  if (result?.errors?.length) {
+    console.error(
+      "SHOPIFY METAOBJECT LOOKUP ERRORS:",
+      result.errors
+    );
+
+    return null;
+  }
+
+  const metaobjects =
+    result?.data
+      ?.metaobjects
+      ?.nodes || [];
+
+  return (
+    metaobjects.find(
+      (metaobject) =>
+        metaobject
+          ?.taxonomyReference
+          ?.value ===
+        taxonomyValueId
+    ) || null
+  );
+}
+
+/*
+ * =========================================================
+ * SHOPIFY KATEGORIE-METAFIELDS VORBEREITEN
+ * =========================================================
+ */
+
+async function prepareShopifyTaxonomyMetafields(
+  admin,
+  attributes
+) {
+  if (
+    !admin ||
+    !Array.isArray(attributes) ||
+    !attributes.length
+  ) {
+    return [];
+  }
+
+  /*
+   * Bereits bestätigte Shopify-Standarddefinitionen.
+   *
+   * Nicht bekannte Attribute werden NICHT geraten.
+   */
+  const definitions = {
+    "Color": {
+      namespace: "shopify",
+      key: "color-pattern",
+      type: "list.metaobject_reference",
+      metaobjectType:
+        "shopify--color-pattern",
+    },
+
+    "Target gender": {
+      namespace: "shopify",
+      key: "target-gender",
+      type: "list.metaobject_reference",
+      metaobjectType:
+        "shopify--target-gender",
+    },
+
+    "Fabric": {
+      namespace: "shopify",
+      key: "fabric",
+      type: "list.metaobject_reference",
+      metaobjectType:
+        "shopify--fabric",
+    },
+  };
+
+  const metafields = [];
+
+  for (const attribute of attributes) {
+    const definition =
+      definitions[
+        attribute?.attributeName
+      ];
+
+    if (!definition) {
+      continue;
+    }
+
+    const metaobjectIds = [];
+
+    for (
+      const taxonomyValue of
+      attribute.values || []
+    ) {
+      const metaobject =
+        await findShopifyTaxonomyMetaobject(
+          admin,
+          definition.metaobjectType,
+          taxonomyValue.id
+        );
+
+      if (metaobject?.id) {
+        metaobjectIds.push(
+          metaobject.id
+        );
+      }
+    }
+
+    const uniqueIds = [
+      ...new Set(metaobjectIds),
+    ];
+
+    if (!uniqueIds.length) {
+      console.warn(
+        "SHOPIFY TAXONOMY METAOBJECT NOT FOUND:",
+        {
+          attribute:
+            attribute.attributeName,
+
+          values:
+            attribute.values,
+        }
+      );
+
+      continue;
+    }
+
+    metafields.push({
+      namespace:
+        definition.namespace,
+
+      key:
+        definition.key,
+
+      type:
+        definition.type,
+
+      /*
+       * list.metaobject_reference erwartet
+       * eine JSON-Liste von Metaobject-GIDs.
+       */
+      value:
+        JSON.stringify(uniqueIds),
+    });
+  }
+
+  return metafields;
+}
+
+/*
+ * =========================================================
  * API ACTION
  * =========================================================
  */
@@ -556,6 +762,17 @@ const shopifyTaxonomyAttributes =
     product.shopifyTaxonomyAttributes
   );
 
+const shopifyTaxonomyMetafields =
+  await prepareShopifyTaxonomyMetafields(
+    admin,
+    shopifyTaxonomyAttributes
+  );
+
+console.log(
+  "SHOPIFY TAXONOMY METAFIELDS:",
+  shopifyTaxonomyMetafields
+);
+
 const metaTitle =
   product.metaTitle
     ? String(product.metaTitle).trim()
@@ -738,6 +955,8 @@ const metaDescription =
                 "DRAFT",
 
               metafields: [
+...shopifyTaxonomyMetafields,
+
                 {
                   namespace:
                     "marktblatt",
