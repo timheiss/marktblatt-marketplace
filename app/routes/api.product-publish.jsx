@@ -289,6 +289,28 @@ async function findShopifyTaxonomyMetaobject(
       ?.metaobjects
       ?.nodes || [];
 
+console.log(
+  "SHOPIFY METAOBJECT DEBUG:",
+  {
+    metaobjectType,
+    taxonomyValueId,
+    count: metaobjects.length,
+
+    sample:
+      metaobjects
+        .slice(0, 10)
+        .map((item) => ({
+          id: item.id,
+          handle: item.handle,
+          displayName:
+            item.displayName,
+          taxonomyReference:
+            item.taxonomyReference
+              ?.value || null,
+        })),
+  }
+);
+
   return (
     metaobjects.find(
       (metaobject) =>
