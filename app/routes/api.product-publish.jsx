@@ -334,11 +334,18 @@ async function findShopifyTaxonomyMetaobject(
    * Shopify-Definition bestätigt.
    */
 
-  if (
-    metaobjectType !==
-      "shopify--fabric" ||
-    !taxonomyValueName
-  ) {
+const simpleTaxonomyMetaobjectTypes =
+  new Set([
+    "shopify--fabric",
+    "shopify--target-gender",
+  ]);
+
+if (
+  !simpleTaxonomyMetaobjectTypes.has(
+    metaobjectType
+  ) ||
+  !taxonomyValueName
+) {
     console.log(
       "SHOPIFY TAXONOMY METAOBJECT NOT FOUND:",
       {
