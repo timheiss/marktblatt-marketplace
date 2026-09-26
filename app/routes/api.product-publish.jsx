@@ -340,23 +340,30 @@ const simpleTaxonomyMetaobjectTypes =
     "shopify--target-gender",
   ]);
 
+const isColorPattern =
+  metaobjectType ===
+  "shopify--color-pattern";
+
 if (
-  !simpleTaxonomyMetaobjectTypes.has(
-    metaobjectType
+  (
+    !simpleTaxonomyMetaobjectTypes.has(
+      metaobjectType
+    ) &&
+    !isColorPattern
   ) ||
   !taxonomyValueName
 ) {
-    console.log(
-      "SHOPIFY TAXONOMY METAOBJECT NOT FOUND:",
-      {
-        metaobjectType,
-        taxonomyValueId,
-        taxonomyValueName,
-      }
-    );
+  console.log(
+    "SHOPIFY TAXONOMY METAOBJECT NOT FOUND:",
+    {
+      metaobjectType,
+      taxonomyValueId,
+      taxonomyValueName,
+    }
+  );
 
-    return null;
-  }
+  return null;
+}
 
   const createResponse =
     await admin.graphql(
@@ -394,21 +401,62 @@ if (
           metaobject: {
             type: metaobjectType,
 
-            fields: [
-              {
-                key: "label",
-                value:
-                  String(
-                    taxonomyValueName
-                  ).trim(),
-              },
-              {
-                key:
-                  "taxonomy_reference",
-                value:
-                  taxonomyValueId,
-              },
-            ],
+           fields:
+  isColorPattern
+    ? [
+        {
+          key: "label",
+          value:
+            String(
+              taxonomyValueName
+            ).trim(),
+        },
+
+        /*
+         * Shopify erwartet hier eine Liste.
+         */
+        {
+          key:
+            "color_taxonomy_reference",
+
+          value:
+            JSON.stringify([
+              taxonomyValueId,
+            ]),
+        },
+
+        /*
+         * Ein normaler einzelner Farbwert
+         * wird als "Solid" behandelt.
+         *
+         * Shopify Taxonomy:
+         * Pattern -> Solid
+         */
+        {
+          key:
+            "pattern_taxonomy_reference",
+
+          value:
+            "gid://shopify/TaxonomyValue/2874",
+        },
+      ]
+    : [
+        {
+          key: "label",
+          value:
+            String(
+              taxonomyValueName
+            ).trim(),
+        },
+
+        {
+          key:
+            "taxonomy_reference",
+
+          value:
+            taxonomyValueId,
+        },
+      ],
           },
         },
       }
