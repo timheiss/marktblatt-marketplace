@@ -190,6 +190,79 @@ const metafieldDefinitions =
 
 /*
  * =========================================================
+ * SHOPIFY STANDARD-METAFIELD-TEMPLATES
+ * =========================================================
+ *
+ * Nur lesen.
+ *
+ * Damit prüfen wir, welche offiziellen Shopify-
+ * Standarddefinitionen für Produkte verfügbar sind.
+ */
+
+const standardDefinitionsResponse =
+  await admin.graphql(
+    `#graphql
+      query StandardMetafieldDefinitions {
+        standardMetafieldDefinitionTemplates(
+          first: 250
+        ) {
+          nodes {
+            id
+            name
+            namespace
+            key
+            description
+            ownerTypes
+
+            type {
+              name
+            }
+
+            validations {
+              name
+              value
+            }
+          }
+        }
+      }
+    `
+  );
+
+const standardDefinitionsResult =
+  await standardDefinitionsResponse.json();
+
+if (
+  standardDefinitionsResult
+    ?.errors
+    ?.length
+) {
+  console.error(
+    "SHOPIFY STANDARD METAFIELD TEMPLATE ERRORS:",
+    standardDefinitionsResult.errors
+  );
+
+  return Response.json(
+    {
+      success: false,
+      stage:
+        "standardMetafieldDefinitionTemplates",
+      errors:
+        standardDefinitionsResult.errors,
+    },
+    {
+      status: 500,
+    }
+  );
+}
+
+const standardMetafieldDefinitions =
+  standardDefinitionsResult
+    ?.data
+    ?.standardMetafieldDefinitionTemplates
+    ?.nodes || [];
+
+/*
+ * =========================================================
  * SHOPIFY STANDARD-METAOBJECT-DEFINITIONEN
  * =========================================================
  *
@@ -413,6 +486,7 @@ return Response.json({
   success: true,
   category: bracelets,
   metafieldDefinitions,
+  standardMetafieldDefinitions,
   categoryMetaobjectDefinitions,
   colorPatternMetaobjects,
 });
