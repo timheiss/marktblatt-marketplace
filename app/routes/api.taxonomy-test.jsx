@@ -188,6 +188,79 @@ const metafieldDefinitions =
     ?.metafieldDefinitions
     ?.nodes || [];
 
+/*
+ * =========================================================
+ * SHOPIFY STANDARD-METAOBJECT-DEFINITION: FABRIC
+ * =========================================================
+ *
+ * Nur lesen.
+ * Damit ermitteln wir die exakten Felder, die Shopify
+ * für shopify--fabric verwendet.
+ */
+
+const metaobjectDefinitionResponse =
+  await admin.graphql(
+    `#graphql
+      query FabricMetaobjectDefinition {
+        metaobjectDefinitionByType(
+          type: "shopify--fabric"
+        ) {
+          id
+          name
+          type
+
+          fieldDefinitions {
+            key
+            name
+            required
+
+            type {
+              name
+            }
+
+            validations {
+              name
+              value
+            }
+          }
+        }
+      }
+    `
+  );
+
+const metaobjectDefinitionResult =
+  await metaobjectDefinitionResponse.json();
+
+if (
+  metaobjectDefinitionResult
+    ?.errors
+    ?.length
+) {
+  console.error(
+    "SHOPIFY METAOBJECT DEFINITION ERRORS:",
+    metaobjectDefinitionResult.errors
+  );
+
+  return Response.json(
+    {
+      success: false,
+      stage:
+        "metaobjectDefinitionByType",
+      errors:
+        metaobjectDefinitionResult.errors,
+    },
+    {
+      status: 500,
+    }
+  );
+}
+
+const fabricMetaobjectDefinition =
+  metaobjectDefinitionResult
+    ?.data
+    ?.metaobjectDefinitionByType ||
+  null;
+
     console.log(
       "SHOPIFY BRACELETS ATTRIBUTES:",
       JSON.stringify(
@@ -202,6 +275,7 @@ return Response.json({
   success: true,
   category: bracelets,
   metafieldDefinitions,
+  fabricMetaobjectDefinition,
 });
 
   } catch (error) {
