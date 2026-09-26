@@ -330,6 +330,75 @@ const categoryMetaobjectDefinitions = {
     null,
 };
 
+/*
+ * =========================================================
+ * VORHANDENE SHOPIFY COLOR-PATTERN METAOBJECTS
+ * =========================================================
+ *
+ * Nur lesen.
+ *
+ * Damit sehen wir die tatsächliche Struktur bereits
+ * vorhandener Shopify-Farb-/Muster-Metaobjects.
+ */
+
+const colorPatternMetaobjectsResponse =
+  await admin.graphql(
+    `#graphql
+      query ShopifyColorPatternMetaobjects {
+        metaobjects(
+          type: "shopify--color-pattern"
+          first: 50
+        ) {
+          nodes {
+            id
+            handle
+            type
+            displayName
+
+            fields {
+              key
+              value
+              type
+            }
+          }
+        }
+      }
+    `
+  );
+
+const colorPatternMetaobjectsResult =
+  await colorPatternMetaobjectsResponse.json();
+
+if (
+  colorPatternMetaobjectsResult
+    ?.errors
+    ?.length
+) {
+  console.error(
+    "SHOPIFY COLOR PATTERN METAOBJECT ERRORS:",
+    colorPatternMetaobjectsResult.errors
+  );
+
+  return Response.json(
+    {
+      success: false,
+      stage:
+        "colorPatternMetaobjects",
+      errors:
+        colorPatternMetaobjectsResult.errors,
+    },
+    {
+      status: 500,
+    }
+  );
+}
+
+const colorPatternMetaobjects =
+  colorPatternMetaobjectsResult
+    ?.data
+    ?.metaobjects
+    ?.nodes || [];
+
     console.log(
       "SHOPIFY BRACELETS ATTRIBUTES:",
       JSON.stringify(
@@ -344,7 +413,8 @@ return Response.json({
   success: true,
   category: bracelets,
   metafieldDefinitions,
-categoryMetaobjectDefinitions,
+  categoryMetaobjectDefinitions,
+  colorPatternMetaobjects,
 });
 
   } catch (error) {
