@@ -229,7 +229,8 @@ function parseShopifyTaxonomyAttributes(value) {
 async function findShopifyTaxonomyMetaobject(
   admin,
   metaobjectType,
-  taxonomyValueId
+  taxonomyValueId,
+  taxonomyValueName = null
 ) {
   if (
     !admin ||
@@ -238,6 +239,12 @@ async function findShopifyTaxonomyMetaobject(
   ) {
     return null;
   }
+
+  /*
+   * =======================================================
+   * 1. VORHANDENES METAOBJECT SUCHEN
+   * =======================================================
+   */
 
   const response =
     await admin.graphql(
@@ -289,37 +296,166 @@ async function findShopifyTaxonomyMetaobject(
       ?.metaobjects
       ?.nodes || [];
 
-console.log(
-  "SHOPIFY METAOBJECT DEBUG:",
-  {
-    metaobjectType,
-    taxonomyValueId,
-    count: metaobjects.length,
-
-    sample:
-      metaobjects
-        .slice(0, 10)
-        .map((item) => ({
-          id: item.id,
-          handle: item.handle,
-          displayName:
-            item.displayName,
-          taxonomyReference:
-            item.taxonomyReference
-              ?.value || null,
-        })),
-  }
-);
-
-  return (
+  const existingMetaobject =
     metaobjects.find(
       (metaobject) =>
         metaobject
           ?.taxonomyReference
           ?.value ===
         taxonomyValueId
-    ) || null
-  );
+    ) || null;
+
+  if (existingMetaobject) {
+    console.log(
+      "SHOPIFY TAXONOMY METAOBJECT FOUND:",
+      {
+        metaobjectType,
+        taxonomyValueId,
+        metaobjectId:
+          existingMetaobject.id,
+        displayName:
+          existingMetaobject.displayName,
+      }
+    );
+
+    return existingMetaobject;
+  }
+
+
+  /*
+   * =======================================================
+   * 2. FEHLENDES STANDARD-METAOBJECT ERSTELLEN
+   * =======================================================
+   *
+   * Vorerst ausschließlich Fabric.
+   *
+   * Für shopify--fabric wurden die Pflichtfelder
+   * label und taxonomy_reference über die echte
+   * Shopify-Definition bestätigt.
+   */
+
+  if (
+    metaobjectType !==
+      "shopify--fabric" ||
+    !taxonomyValueName
+  ) {
+    console.log(
+      "SHOPIFY TAXONOMY METAOBJECT NOT FOUND:",
+      {
+        metaobjectType,
+        taxonomyValueId,
+        taxonomyValueName,
+      }
+    );
+
+    return null;
+  }
+
+  const createResponse =
+    await admin.graphql(
+      `#graphql
+        mutation CreateTaxonomyMetaobject(
+          $metaobject: MetaobjectCreateInput!
+        ) {
+          metaobjectCreate(
+            metaobject: $metaobject
+          ) {
+            metaobject {
+              id
+              handle
+              type
+              displayName
+
+              taxonomyReference:
+                field(
+                  key: "taxonomy_reference"
+                ) {
+                  value
+                }
+            }
+
+            userErrors {
+              field
+              message
+              code
+            }
+          }
+        }
+      `,
+      {
+        variables: {
+          metaobject: {
+            type: metaobjectType,
+
+            fields: [
+              {
+                key: "label",
+                value:
+                  String(
+                    taxonomyValueName
+                  ).trim(),
+              },
+              {
+                key:
+                  "taxonomy_reference",
+                value:
+                  taxonomyValueId,
+              },
+            ],
+          },
+        },
+      }
+    );
+
+  const createResult =
+    await createResponse.json();
+
+  if (
+    createResult?.errors?.length
+  ) {
+    console.error(
+      "SHOPIFY METAOBJECT CREATE GRAPHQL ERRORS:",
+      createResult.errors
+    );
+
+    return null;
+  }
+
+  const createErrors =
+    createResult?.data
+      ?.metaobjectCreate
+      ?.userErrors || [];
+
+  if (createErrors.length > 0) {
+    console.error(
+      "SHOPIFY METAOBJECT CREATE USER ERRORS:",
+      createErrors
+    );
+
+    return null;
+  }
+
+  const createdMetaobject =
+    createResult?.data
+      ?.metaobjectCreate
+      ?.metaobject || null;
+
+  if (createdMetaobject?.id) {
+    console.log(
+      "SHOPIFY TAXONOMY METAOBJECT CREATED:",
+      {
+        metaobjectType,
+        taxonomyValueId,
+        taxonomyValueName,
+        metaobjectId:
+          createdMetaobject.id,
+        displayName:
+          createdMetaobject.displayName,
+      }
+    );
+  }
+
+  return createdMetaobject;
 }
 
 /*
@@ -389,12 +525,13 @@ async function prepareShopifyTaxonomyMetafields(
       const taxonomyValue of
       attribute.values || []
     ) {
-      const metaobject =
-        await findShopifyTaxonomyMetaobject(
-          admin,
-          definition.metaobjectType,
-          taxonomyValue.id
-        );
+const metaobject =
+  await findShopifyTaxonomyMetaobject(
+    admin,
+    definition.metaobjectType,
+    taxonomyValue.id,
+    taxonomyValue.name
+  );
 
       if (metaobject?.id) {
         metaobjectIds.push(
