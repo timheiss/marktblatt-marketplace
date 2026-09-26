@@ -144,6 +144,77 @@ function prepareMedia(product) {
   return media;
 }
 
+/*
+ * =========================================================
+ * SHOPIFY TAXONOMIEATTRIBUTE AUS DATENBANK LESEN
+ * =========================================================
+ */
+
+function parseShopifyTaxonomyAttributes(value) {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const attributes =
+      typeof value === "string"
+        ? JSON.parse(value)
+        : value;
+
+    if (!Array.isArray(attributes)) {
+      return [];
+    }
+
+    return attributes
+      .map((attribute) => {
+        const attributeName =
+          String(
+            attribute?.attributeName || ""
+          ).trim();
+
+        const values =
+          Array.isArray(attribute?.values)
+            ? attribute.values
+                .map((item) => ({
+                  id:
+                    String(
+                      item?.id || ""
+                    ).trim(),
+
+                  name:
+                    String(
+                      item?.name || ""
+                    ).trim(),
+                }))
+                .filter(
+                  (item) =>
+                    item.id &&
+                    item.name
+                )
+            : [];
+
+        if (
+          !attributeName ||
+          !values.length
+        ) {
+          return null;
+        }
+
+        return {
+          attributeName,
+          values,
+        };
+      })
+      .filter(Boolean);
+  } catch (error) {
+    console.error(
+      "SHOPIFY TAXONOMY ATTRIBUTES PARSE ERROR:",
+      error
+    );
+
+    return [];
+  }
+}
 
 /*
  * =========================================================
@@ -479,6 +550,11 @@ const shopifyTaxonomyId =
         product.shopifyTaxonomyId
       ).trim()
     : null;
+
+const shopifyTaxonomyAttributes =
+  parseShopifyTaxonomyAttributes(
+    product.shopifyTaxonomyAttributes
+  );
 
 const metaTitle =
   product.metaTitle
