@@ -352,6 +352,53 @@ const metaobjectDefinitionsResponse =
               }
             }
           }
+ageGroup:
+  metaobjectDefinitionByType(
+    type: "shopify--age-group"
+  ) {
+    id
+    name
+    type
+
+    fieldDefinitions {
+      key
+      name
+      required
+
+      type {
+        name
+      }
+
+      validations {
+        name
+        value
+      }
+    }
+  }
+
+jewelryType:
+  metaobjectDefinitionByType(
+    type: "shopify--jewelry-type"
+  ) {
+    id
+    name
+    type
+
+    fieldDefinitions {
+      key
+      name
+      required
+
+      type {
+        name
+      }
+
+      validations {
+        name
+        value
+      }
+    }
+  }
       }
     `
   );
@@ -401,6 +448,17 @@ const categoryMetaobjectDefinitions = {
       ?.data
       ?.fabric ||
     null,
+ageGroup:
+  metaobjectDefinitionsResult
+    ?.data
+    ?.ageGroup ||
+  null,
+
+jewelryType:
+  metaobjectDefinitionsResult
+    ?.data
+    ?.jewelryType ||
+  null,
 };
 
 /*

@@ -532,61 +532,211 @@ async function prepareShopifyTaxonomyMetafields(
   }
 
   /*
-   * Bereits bestätigte Shopify-Standarddefinitionen.
+   * =======================================================
+   * 1. SHOPIFY-STANDARD-METAFIELD-DEFINITIONEN LADEN
+   * =======================================================
    *
-   * Nicht bekannte Attribute werden NICHT geraten.
+   * Keine Attribute mehr fest im Code hinterlegen.
+   *
+   * Shopify liefert uns selbst:
+   * - Name
+   * - Namespace
+   * - Key
+   * - Typ
+   *
+   * Beispiele:
+   * Age group    -> shopify.age-group
+   * Jewelry type -> shopify.jewelry-type
+   * Color        -> shopify.color-pattern
    */
-  const definitions = {
-    "Color": {
-      namespace: "shopify",
-      key: "color-pattern",
-      type: "list.metaobject_reference",
-      metaobjectType:
-        "shopify--color-pattern",
-    },
 
-    "Target gender": {
-      namespace: "shopify",
-      key: "target-gender",
-      type: "list.metaobject_reference",
-      metaobjectType:
-        "shopify--target-gender",
-    },
+  const definitionsResponse =
+    await admin.graphql(
+      `#graphql
+        query StandardProductMetafieldDefinitions {
+          standardMetafieldDefinitionTemplates(
+            first: 250
+          ) {
+            nodes {
+              id
+              name
+              namespace
+              key
 
-    "Fabric": {
-      namespace: "shopify",
-      key: "fabric",
-      type: "list.metaobject_reference",
-      metaobjectType:
-        "shopify--fabric",
-    },
-  };
+              ownerTypes
+
+              type {
+                name
+              }
+
+              validations {
+                name
+                value
+              }
+            }
+          }
+        }
+      `
+    );
+
+  const definitionsResult =
+    await definitionsResponse.json();
+
+  if (definitionsResult?.errors?.length) {
+    console.error(
+      "SHOPIFY STANDARD METAFIELD DEFINITION ERRORS:",
+      definitionsResult.errors
+    );
+
+    return [];
+  }
+
+  const standardDefinitions =
+    definitionsResult?.data
+      ?.standardMetafieldDefinitionTemplates
+      ?.nodes || [];
+
+  /*
+   * Nur Definitionen verwenden, die tatsächlich
+   * für PRODUCT vorgesehen sind.
+   */
+
+  const productDefinitions =
+    standardDefinitions.filter(
+      (definition) =>
+        Array.isArray(
+          definition?.ownerTypes
+        ) &&
+        definition.ownerTypes.includes(
+          "PRODUCT"
+        )
+    );
 
   const metafields = [];
 
-  for (const attribute of attributes) {
-    const definition =
-      definitions[
-        attribute?.attributeName
-      ];
+  /*
+   * =======================================================
+   * 2. ERKANNTE TAXONOMIEATTRIBUTE VERARBEITEN
+   * =======================================================
+   */
 
-    if (!definition) {
+  for (const attribute of attributes) {
+    const attributeName =
+      String(
+        attribute?.attributeName || ""
+      ).trim();
+
+    if (!attributeName) {
       continue;
     }
 
+    /*
+     * Passende Shopify-Standarddefinition anhand
+     * des echten Attributnamens suchen.
+     */
+
+    const definition =
+      productDefinitions.find(
+        (item) =>
+          String(
+            item?.name || ""
+          )
+            .trim()
+            .toLowerCase() ===
+          attributeName.toLowerCase()
+      );
+
+    if (!definition) {
+      console.log(
+        "SHOPIFY STANDARD METAFIELD DEFINITION NOT FOUND:",
+        {
+          attribute:
+            attributeName,
+        }
+      );
+
+      continue;
+    }
+
+    /*
+     * Aktuell verarbeiten wir ausschließlich
+     * Shopify-Standardfelder, die als Liste von
+     * Metaobject-Referenzen gespeichert werden.
+     */
+
+    if (
+      definition?.type?.name !==
+      "list.metaobject_reference"
+    ) {
+      console.log(
+        "SHOPIFY STANDARD METAFIELD TYPE NOT SUPPORTED:",
+        {
+          attribute:
+            attributeName,
+
+          namespace:
+            definition.namespace,
+
+          key:
+            definition.key,
+
+          type:
+            definition?.type?.name,
+        }
+      );
+
+      continue;
+    }
+
+    /*
+     * =====================================================
+     * 3. METAOBJECT-TYP ERMITTELN
+     * =====================================================
+     *
+     * Shopify-Standardmetafields verwenden hier das
+     * Schema:
+     *
+     * shopify.age-group
+     *        -> shopify--age-group
+     *
+     * shopify.jewelry-type
+     *        -> shopify--jewelry-type
+     *
+     * shopify.target-gender
+     *        -> shopify--target-gender
+     *
+     * Color ist ein bestätigter Sonderfall:
+     *
+     * shopify.color-pattern
+     *        -> shopify--color-pattern
+     */
+
+    const metaobjectType =
+      `shopify--${definition.key}`;
+
     const metaobjectIds = [];
+
+    /*
+     * =====================================================
+     * 4. TAXONOMIEWERTE IN METAOBJECTS AUFLÖSEN
+     * =====================================================
+     */
 
     for (
       const taxonomyValue of
       attribute.values || []
     ) {
-const metaobject =
-  await findShopifyTaxonomyMetaobject(
-    admin,
-    definition.metaobjectType,
-    taxonomyValue.id,
-    taxonomyValue.name
-  );
+      if (!taxonomyValue?.id) {
+        continue;
+      }
+
+      const metaobject =
+        await findShopifyTaxonomyMetaobject(
+          admin,
+          metaobjectType,
+          taxonomyValue.id,
+          taxonomyValue.name
+        );
 
       if (metaobject?.id) {
         metaobjectIds.push(
@@ -604,7 +754,9 @@ const metaobject =
         "SHOPIFY TAXONOMY METAOBJECT NOT FOUND:",
         {
           attribute:
-            attribute.attributeName,
+            attributeName,
+
+          metaobjectType,
 
           values:
             attribute.values,
@@ -614,6 +766,12 @@ const metaobject =
       continue;
     }
 
+    /*
+     * =====================================================
+     * 5. SHOPIFY-METAFIELD ERZEUGEN
+     * =====================================================
+     */
+
     metafields.push({
       namespace:
         definition.namespace,
@@ -622,20 +780,34 @@ const metaobject =
         definition.key,
 
       type:
-        definition.type,
+        definition.type.name,
 
-      /*
-       * list.metaobject_reference erwartet
-       * eine JSON-Liste von Metaobject-GIDs.
-       */
       value:
         JSON.stringify(uniqueIds),
     });
+
+    console.log(
+      "SHOPIFY TAXONOMY METAFIELD PREPARED:",
+      {
+        attribute:
+          attributeName,
+
+        namespace:
+          definition.namespace,
+
+        key:
+          definition.key,
+
+        metaobjectType,
+
+        values:
+          uniqueIds,
+      }
+    );
   }
 
   return metafields;
 }
-
 /*
  * =========================================================
  * API ACTION
