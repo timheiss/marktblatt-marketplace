@@ -680,6 +680,69 @@ const enablePayloadResult =
 const standardMetafieldDefinitionEnablePayload =
   enablePayloadResult?.data?.__type || null;
 
+/*
+ * =========================================================
+ * TEST: JEWELRY MATERIAL STANDARDDEFINITION AKTIVIEREN
+ * =========================================================
+ *
+ * Aktiviert ausschließlich Shopifys offizielle
+ * Standard-Metafelddefinition "Jewelry material".
+ */
+
+const enableJewelryMaterialResponse =
+  await admin.graphql(
+    `#graphql
+      mutation EnableJewelryMaterial {
+        standardMetafieldDefinitionEnable(
+          ownerType: PRODUCT
+          id: "gid://shopify/StandardMetafieldDefinitionTemplate/12781"
+        ) {
+          createdDefinition {
+            id
+            name
+            namespace
+            key
+
+            type {
+              name
+            }
+          }
+
+          userErrors {
+            field
+            message
+            code
+          }
+        }
+      }
+    `
+  );
+
+const enableJewelryMaterialResult =
+  await enableJewelryMaterialResponse.json();
+
+if (enableJewelryMaterialResult?.errors?.length) {
+  console.error(
+    "SHOPIFY JEWELRY MATERIAL ENABLE GRAPHQL ERRORS:",
+    enableJewelryMaterialResult.errors
+  );
+
+  return Response.json(
+    {
+      success: false,
+      stage: "enableJewelryMaterial",
+      errors: enableJewelryMaterialResult.errors,
+    },
+    {
+      status: 500,
+    }
+  );
+}
+
+const jewelryMaterialEnable =
+  enableJewelryMaterialResult?.data
+    ?.standardMetafieldDefinitionEnable || null;
+
 return Response.json({
   success: true,
   category: bracelets,
@@ -688,7 +751,8 @@ return Response.json({
   categoryMetaobjectDefinitions,
   colorPatternMetaobjects,
   standardMetafieldDefinitionEnableMutation,
-standardMetafieldDefinitionEnablePayload,
+  standardMetafieldDefinitionEnablePayload,
+  jewelryMaterialEnable,
 });
 
   } catch (error) {
