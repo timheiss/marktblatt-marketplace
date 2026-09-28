@@ -162,8 +162,6 @@ const definitionsResponse =
           }
         }
       }
-        }
-      }
     `,
     {
       variables: {
