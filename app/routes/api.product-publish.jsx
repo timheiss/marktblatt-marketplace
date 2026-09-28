@@ -704,6 +704,8 @@ console.log(
       namespace: definition.namespace,
       key: definition.key,
       type: definition?.type?.name,
+      validations:
+        definition.validations,
     })
   )
 );
