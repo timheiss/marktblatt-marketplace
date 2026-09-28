@@ -710,6 +710,69 @@ console.log(
   )
 );
 
+  /*
+   * =======================================================
+   * NOCH NICHT AKTIVIERTE SHOPIFY-STANDARDTEMPLATES LADEN
+   * =======================================================
+   *
+   * Falls ein Taxonomieattribut für die Produktkategorie
+   * existiert, aber die entsprechende Metafield-Definition
+   * im Shop noch nicht aktiviert wurde, können wir hier das
+   * offizielle Shopify-Template finden.
+   */
+
+  const templatesResponse =
+    await admin.graphql(
+      `#graphql
+        query CategoryStandardMetafieldTemplates(
+          $constraintSubtype: MetafieldDefinitionConstraintSubtypeIdentifier!
+        ) {
+          standardMetafieldDefinitionTemplates(
+            first: 250
+            constraintSubtype: $constraintSubtype
+            excludeActivated: true
+          ) {
+            nodes {
+              id
+              name
+              namespace
+              key
+              ownerTypes
+
+              type {
+                name
+              }
+            }
+          }
+        }
+      `,
+      {
+        variables: {
+          constraintSubtype: {
+            key: "category",
+            value: shopifyTaxonomyId,
+          },
+        },
+      }
+    );
+
+  const templatesResult =
+    await templatesResponse.json();
+
+  if (templatesResult?.errors?.length) {
+    console.error(
+      "SHOPIFY STANDARD METAFIELD TEMPLATE ERRORS:",
+      templatesResult.errors
+    );
+
+    return [];
+  }
+
+  const standardTemplates =
+    templatesResult?.data
+      ?.standardMetafieldDefinitionTemplates
+      ?.nodes || [];
+
   const metafields = [];
 
   /*
@@ -733,27 +796,156 @@ console.log(
      * des echten Attributnamens suchen.
      */
 
-    const definition =
+    let definition =
       productDefinitions.find(
         (item) =>
-          String(
-            item?.name || ""
-          )
+          String(item?.name || "")
             .trim()
             .toLowerCase() ===
           attributeName.toLowerCase()
-      );
+      ) || null;
+
+    /*
+     * =====================================================
+     * FEHLENDE SHOPIFY-STANDARDDEFINITION AKTIVIEREN
+     * =====================================================
+     */
 
     if (!definition) {
+      const template =
+        standardTemplates.find(
+          (item) =>
+            Array.isArray(item?.ownerTypes) &&
+            item.ownerTypes.includes("PRODUCT") &&
+            String(item?.name || "")
+              .trim()
+              .toLowerCase() ===
+              attributeName.toLowerCase()
+        ) || null;
+
+      if (!template?.id) {
+        console.log(
+          "SHOPIFY STANDARD METAFIELD TEMPLATE NOT FOUND:",
+          {
+            attribute: attributeName,
+          }
+        );
+
+        continue;
+      }
+
       console.log(
-        "SHOPIFY STANDARD METAFIELD DEFINITION NOT FOUND:",
+        "SHOPIFY STANDARD METAFIELD ENABLING:",
         {
-          attribute:
-            attributeName,
+          attribute: attributeName,
+          templateId: template.id,
+          namespace: template.namespace,
+          key: template.key,
+          type: template?.type?.name,
         }
       );
 
-      continue;
+      const enableResponse =
+        await admin.graphql(
+          `#graphql
+            mutation EnableStandardMetafieldDefinition(
+              $ownerType: MetafieldOwnerType!
+              $id: ID!
+            ) {
+              standardMetafieldDefinitionEnable(
+                ownerType: $ownerType
+                id: $id
+              ) {
+                createdDefinition {
+                  id
+                  name
+                  namespace
+                  key
+
+                  type {
+                    name
+                  }
+                }
+
+                userErrors {
+                  field
+                  message
+                  code
+                }
+              }
+            }
+          `,
+          {
+            variables: {
+              ownerType: "PRODUCT",
+              id: template.id,
+            },
+          }
+        );
+
+      const enableResult =
+        await enableResponse.json();
+
+      if (enableResult?.errors?.length) {
+        console.error(
+          "SHOPIFY STANDARD METAFIELD ENABLE GRAPHQL ERRORS:",
+          enableResult.errors
+        );
+
+        continue;
+      }
+
+      const enablePayload =
+        enableResult?.data
+          ?.standardMetafieldDefinitionEnable;
+
+      const enableErrors =
+        enablePayload?.userErrors || [];
+
+      if (enableErrors.length) {
+        console.error(
+          "SHOPIFY STANDARD METAFIELD ENABLE USER ERRORS:",
+          {
+            attribute: attributeName,
+            errors: enableErrors,
+          }
+        );
+
+        continue;
+      }
+
+      definition =
+        enablePayload?.createdDefinition ||
+        null;
+
+      if (!definition) {
+        console.error(
+          "SHOPIFY STANDARD METAFIELD ENABLE RETURNED NO DEFINITION:",
+          {
+            attribute: attributeName,
+            templateId: template.id,
+          }
+        );
+
+        continue;
+      }
+
+      /*
+       * Auch für weitere Attribute derselben Veröffentlichung
+       * verfügbar machen.
+       */
+      productDefinitions.push(definition);
+
+      console.log(
+        "SHOPIFY STANDARD METAFIELD ENABLED:",
+        {
+          attribute: attributeName,
+          definitionId: definition.id,
+          namespace: definition.namespace,
+          key: definition.key,
+          type: definition?.type?.name,
+        }
+      );
     }
 
     /*
