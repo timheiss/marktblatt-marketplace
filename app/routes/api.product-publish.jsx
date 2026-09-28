@@ -167,6 +167,11 @@ function parseShopifyTaxonomyAttributes(value) {
 
     return attributes
       .map((attribute) => {
+const attributeId =
+  String(
+    attribute?.attributeId || ""
+  ).trim();
+
         const attributeName =
           String(
             attribute?.attributeName || ""
@@ -200,10 +205,11 @@ function parseShopifyTaxonomyAttributes(value) {
           return null;
         }
 
-        return {
-          attributeName,
-          values,
-        };
+return {
+  attributeId,
+  attributeName,
+  values,
+};
       })
       .filter(Boolean);
   } catch (error) {
@@ -611,6 +617,15 @@ async function prepareShopifyTaxonomyMetafields(
           "PRODUCT"
         )
     );
+
+console.log(
+  "SHOPIFY PRODUCT STANDARD DEFINITIONS:",
+  JSON.stringify(
+    productDefinitions,
+    null,
+    2
+  )
+);
 
   const metafields = [];
 

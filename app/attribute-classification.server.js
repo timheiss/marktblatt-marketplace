@@ -52,17 +52,18 @@ export async function classifyProductAttributes(
           attribute?.name &&
           attribute?.values?.nodes?.length
       )
-      .map((attribute) => ({
-        name: attribute.name,
+.map((attribute) => ({
+  id: attribute.id,
+  name: attribute.name,
 
-        values:
-          attribute.values.nodes.map(
-            (value) => ({
-              id: value.id,
-              name: value.name,
-            })
-          ),
-      }));
+  values:
+    attribute.values.nodes.map(
+      (value) => ({
+        id: value.id,
+        name: value.name,
+      })
+    ),
+}));
 
 
   if (!allowedAttributes.length) {
@@ -292,13 +293,16 @@ ${JSON.stringify(allowedAttributes)}
     }
 
 
-    validated.push({
-      attributeName:
-        allowedAttribute.name,
+validated.push({
+  attributeId:
+    allowedAttribute.id,
 
-      values:
-        validValues,
-    });
+  attributeName:
+    allowedAttribute.name,
+
+  values:
+    validValues,
+});
   }
 
 
