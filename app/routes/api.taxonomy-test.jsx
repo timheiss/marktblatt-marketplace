@@ -633,6 +633,53 @@ const standardMetafieldDefinitionEnableMutation =
         "standardMetafieldDefinitionEnable"
     ) || null;
 
+/*
+ * =========================================================
+ * STANDARD METAFIELD ENABLE PAYLOAD PRÜFEN
+ * =========================================================
+ *
+ * Nur Introspection.
+ * Es wird nichts in Shopify verändert.
+ */
+
+const enablePayloadResponse =
+  await admin.graphql(
+    `#graphql
+      query StandardMetafieldDefinitionEnablePayload {
+        __type(
+          name: "StandardMetafieldDefinitionEnablePayload"
+        ) {
+          name
+
+          fields {
+            name
+
+            type {
+              kind
+              name
+
+              ofType {
+                kind
+                name
+
+                ofType {
+                  kind
+                  name
+                }
+              }
+            }
+          }
+        }
+      }
+    `
+  );
+
+const enablePayloadResult =
+  await enablePayloadResponse.json();
+
+const standardMetafieldDefinitionEnablePayload =
+  enablePayloadResult?.data?.__type || null;
+
 return Response.json({
   success: true,
   category: bracelets,
@@ -641,6 +688,7 @@ return Response.json({
   categoryMetaobjectDefinitions,
   colorPatternMetaobjects,
   standardMetafieldDefinitionEnableMutation,
+standardMetafieldDefinitionEnablePayload,
 });
 
   } catch (error) {
