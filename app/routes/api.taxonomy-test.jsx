@@ -137,10 +137,13 @@ export const loader = async () => {
 const definitionsResponse =
   await admin.graphql(
     `#graphql
-      query CategoryMetafieldDefinitions {
+      query CategoryMetafieldDefinitions(
+        $constraintSubtype: MetafieldDefinitionConstraintSubtypeIdentifier!
+      ) {
         metafieldDefinitions(
           ownerType: PRODUCT
           first: 100
+          constraintSubtype: $constraintSubtype
         ) {
           nodes {
             id
@@ -159,7 +162,18 @@ const definitionsResponse =
           }
         }
       }
-    `
+        }
+      }
+    `,
+    {
+      variables: {
+        constraintSubtype: {
+          key: "category",
+          value:
+            "gid://shopify/TaxonomyCategory/aa-6-3",
+        },
+      },
+    }
   );
 
 const definitionsResult =

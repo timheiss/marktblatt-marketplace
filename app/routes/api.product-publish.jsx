@@ -618,15 +618,6 @@ async function prepareShopifyTaxonomyMetafields(
         )
     );
 
-console.log(
-  "SHOPIFY PRODUCT STANDARD DEFINITIONS:",
-  JSON.stringify(
-    productDefinitions,
-    null,
-    2
-  )
-);
-
   const metafields = [];
 
   /*
