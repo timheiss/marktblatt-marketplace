@@ -214,9 +214,13 @@ const metafieldDefinitions =
 const standardDefinitionsResponse =
   await admin.graphql(
     `#graphql
-      query StandardMetafieldDefinitions {
+      query StandardMetafieldDefinitions(
+        $constraintSubtype: MetafieldDefinitionConstraintSubtypeIdentifier!
+      ) {
         standardMetafieldDefinitionTemplates(
           first: 250
+          constraintSubtype: $constraintSubtype
+          excludeActivated: true
         ) {
           nodes {
             id
@@ -237,7 +241,16 @@ const standardDefinitionsResponse =
           }
         }
       }
-    `
+    `,
+    {
+      variables: {
+        constraintSubtype: {
+          key: "category",
+          value:
+            "gid://shopify/TaxonomyCategory/aa-6-8",
+        },
+      },
+    }
   );
 
 const standardDefinitionsResult =
