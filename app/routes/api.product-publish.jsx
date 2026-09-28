@@ -340,6 +340,75 @@ async function findShopifyTaxonomyMetaobject(
    * Shopify-Definition bestätigt.
    */
 
+  /*
+   * =======================================================
+   * METAOBJECT-DEFINITION DYNAMISCH LADEN
+   * =======================================================
+   */
+
+  const definitionResponse =
+    await admin.graphql(
+      `#graphql
+        query TaxonomyMetaobjectDefinition(
+          $type: String!
+        ) {
+          metaobjectDefinitionByType(
+            type: $type
+          ) {
+            id
+            name
+            type
+
+            fieldDefinitions {
+              key
+              name
+              required
+
+              type {
+                name
+              }
+
+              validations {
+                name
+                value
+              }
+            }
+          }
+        }
+      `,
+      {
+        variables: {
+          type: metaobjectType,
+        },
+      }
+    );
+
+  const definitionResult =
+    await definitionResponse.json();
+
+  if (definitionResult?.errors?.length) {
+    console.error(
+      "SHOPIFY METAOBJECT DEFINITION ERRORS:",
+      definitionResult.errors
+    );
+
+    return null;
+  }
+
+  const metaobjectDefinition =
+    definitionResult?.data
+      ?.metaobjectDefinitionByType ||
+    null;
+
+  console.log(
+    "SHOPIFY TAXONOMY METAOBJECT DEFINITION:",
+    {
+      metaobjectType,
+      definition:
+        metaobjectDefinition,
+    }
+  );
+
 const simpleTaxonomyMetaobjectTypes =
   new Set([
     "shopify--fabric",
@@ -527,10 +596,12 @@ if (
 
 async function prepareShopifyTaxonomyMetafields(
   admin,
+  shopifyTaxonomyId,
   attributes
 ) {
   if (
     !admin ||
+    !shopifyTaxonomyId ||
     !Array.isArray(attributes) ||
     !attributes.length
   ) {
@@ -556,20 +627,34 @@ async function prepareShopifyTaxonomyMetafields(
    * Color        -> shopify.color-pattern
    */
 
+  /*
+   * =======================================================
+   * 1. KATEGORIE-METAFIELD-DEFINITIONEN LADEN
+   * =======================================================
+   *
+   * Shopify liefert nur die Metafields, die für die
+   * tatsächlich erkannte Produktkategorie gelten.
+   *
+   * Dadurch funktioniert dies dynamisch für Schmuck,
+   * Handys, Werkzeuge usw.
+   */
+
   const definitionsResponse =
     await admin.graphql(
       `#graphql
-        query StandardProductMetafieldDefinitions {
-          standardMetafieldDefinitionTemplates(
-            first: 250
+        query CategoryMetafieldDefinitions(
+          $constraintSubtype: MetafieldDefinitionConstraintSubtypeIdentifier!
+        ) {
+          metafieldDefinitions(
+            ownerType: PRODUCT
+            first: 100
+            constraintSubtype: $constraintSubtype
           ) {
             nodes {
               id
               name
               namespace
               key
-
-              ownerTypes
 
               type {
                 name
@@ -582,7 +667,16 @@ async function prepareShopifyTaxonomyMetafields(
             }
           }
         }
-      `
+      `,
+      {
+        variables: {
+          constraintSubtype: {
+            key: "category",
+            value:
+              shopifyTaxonomyId,
+          },
+        },
+      }
     );
 
   const definitionsResult =
@@ -590,33 +684,17 @@ async function prepareShopifyTaxonomyMetafields(
 
   if (definitionsResult?.errors?.length) {
     console.error(
-      "SHOPIFY STANDARD METAFIELD DEFINITION ERRORS:",
+      "SHOPIFY CATEGORY METAFIELD DEFINITION ERRORS:",
       definitionsResult.errors
     );
 
     return [];
   }
 
-  const standardDefinitions =
-    definitionsResult?.data
-      ?.standardMetafieldDefinitionTemplates
-      ?.nodes || [];
-
-  /*
-   * Nur Definitionen verwenden, die tatsächlich
-   * für PRODUCT vorgesehen sind.
-   */
-
   const productDefinitions =
-    standardDefinitions.filter(
-      (definition) =>
-        Array.isArray(
-          definition?.ownerTypes
-        ) &&
-        definition.ownerTypes.includes(
-          "PRODUCT"
-        )
-    );
+    definitionsResult?.data
+      ?.metafieldDefinitions
+      ?.nodes || [];
 
   const metafields = [];
 
@@ -1157,6 +1235,7 @@ const shopifyTaxonomyAttributes =
 const shopifyTaxonomyMetafields =
   await prepareShopifyTaxonomyMetafields(
     admin,
+    shopifyTaxonomyId,
     shopifyTaxonomyAttributes
   );
 
