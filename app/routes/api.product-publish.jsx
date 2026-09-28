@@ -696,6 +696,18 @@ async function prepareShopifyTaxonomyMetafields(
       ?.metafieldDefinitions
       ?.nodes || [];
 
+console.log(
+  "SHOPIFY CATEGORY METAFIELD DEFINITIONS:",
+  productDefinitions.map(
+    (definition) => ({
+      name: definition.name,
+      namespace: definition.namespace,
+      key: definition.key,
+      type: definition?.type?.name,
+    })
+  )
+);
+
   const metafields = [];
 
   /*
