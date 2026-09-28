@@ -564,6 +564,74 @@ const colorPatternMetaobjects =
       )
     );
 
+/*
+ * =========================================================
+ * GRAPHQL MUTATION SCHEMA PRÜFEN
+ * =========================================================
+ *
+ * Nur lesen.
+ * Prüft, ob Shopify
+ * standardMetafieldDefinitionEnable unterstützt
+ * und welche Argumente die Mutation erwartet.
+ */
+
+const mutationSchemaResponse =
+  await admin.graphql(
+    `#graphql
+      query StandardMetafieldDefinitionEnableSchema {
+        __type(name: "Mutation") {
+          fields {
+            name
+
+            args {
+              name
+
+              type {
+                kind
+                name
+
+                ofType {
+                  kind
+                  name
+                }
+              }
+            }
+          }
+        }
+      }
+    `
+  );
+
+const mutationSchemaResult =
+  await mutationSchemaResponse.json();
+
+if (mutationSchemaResult?.errors?.length) {
+  console.error(
+    "SHOPIFY MUTATION SCHEMA ERRORS:",
+    mutationSchemaResult.errors
+  );
+
+  return Response.json(
+    {
+      success: false,
+      stage: "mutationSchema",
+      errors: mutationSchemaResult.errors,
+    },
+    {
+      status: 500,
+    }
+  );
+}
+
+const standardMetafieldDefinitionEnableMutation =
+  mutationSchemaResult?.data
+    ?.__type
+    ?.fields
+    ?.find(
+      (field) =>
+        field.name ===
+        "standardMetafieldDefinitionEnable"
+    ) || null;
 
 return Response.json({
   success: true,
@@ -572,6 +640,7 @@ return Response.json({
   standardMetafieldDefinitions,
   categoryMetaobjectDefinitions,
   colorPatternMetaobjects,
+  standardMetafieldDefinitionEnableMutation,
 });
 
   } catch (error) {
