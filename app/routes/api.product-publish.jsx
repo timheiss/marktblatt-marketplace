@@ -302,14 +302,54 @@ async function findShopifyTaxonomyMetaobject(
       ?.metaobjects
       ?.nodes || [];
 
-  const existingMetaobject =
-    metaobjects.find(
-      (metaobject) =>
+const existingMetaobject =
+  metaobjects.find(
+    (metaobject) => {
+      /*
+       * Normale Shopify-Taxonomie-Metaobjects:
+       * taxonomy_reference enthält eine einzelne
+       * TaxonomyValue-GID.
+       */
+      if (
         metaobject
           ?.taxonomyReference
           ?.value ===
         taxonomyValueId
-    ) || null;
+      ) {
+        return true;
+      }
+
+      /*
+       * Color Pattern ist ein Sonderfall:
+       * color_taxonomy_reference ist eine Liste
+       * von TaxonomyValue-GIDs.
+       */
+      const colorReferenceValue =
+        metaobject
+          ?.colorTaxonomyReference
+          ?.value;
+
+      if (!colorReferenceValue) {
+        return false;
+      }
+
+      try {
+        const colorReferences =
+          JSON.parse(
+            colorReferenceValue
+          );
+
+        return (
+          Array.isArray(colorReferences) &&
+          colorReferences.includes(
+            taxonomyValueId
+          )
+        );
+      } catch {
+        return false;
+      }
+    }
+  ) || null;
 
   if (existingMetaobject) {
     console.log(
@@ -495,6 +535,12 @@ if (
                 ) {
                   value
                 }
+colorTaxonomyReference:
+  field(
+    key: "color_taxonomy_reference"
+  ) {
+    value
+  }
             }
 
             userErrors {
