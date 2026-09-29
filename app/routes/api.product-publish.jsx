@@ -412,31 +412,62 @@ console.log(
   )
 );
 
-const simpleTaxonomyMetaobjectTypes =
-  new Set([
-    "shopify--fabric",
-    "shopify--target-gender",
-  ]);
-
 const isColorPattern =
   metaobjectType ===
   "shopify--color-pattern";
 
+const fieldDefinitions =
+  Array.isArray(
+    metaobjectDefinition?.fieldDefinitions
+  )
+    ? metaobjectDefinition.fieldDefinitions
+    : [];
+
+const labelField =
+  fieldDefinitions.find(
+    (field) =>
+      field?.key === "label"
+  ) || null;
+
+const taxonomyReferenceField =
+  fieldDefinitions.find(
+    (field) =>
+      field?.key ===
+      "taxonomy_reference"
+  ) || null;
+
+const supportsSimpleTaxonomyMetaobject =
+  Boolean(
+    labelField &&
+      taxonomyReferenceField &&
+      taxonomyReferenceField
+        ?.type
+        ?.name ===
+        "product_taxonomy_value_reference"
+  );
+
 if (
   (
-    !simpleTaxonomyMetaobjectTypes.has(
-      metaobjectType
-    ) &&
+    !supportsSimpleTaxonomyMetaobject &&
     !isColorPattern
   ) ||
   !taxonomyValueName
 ) {
   console.log(
-    "SHOPIFY TAXONOMY METAOBJECT NOT FOUND:",
+    "SHOPIFY TAXONOMY METAOBJECT NOT SUPPORTED:",
     {
       metaobjectType,
       taxonomyValueId,
       taxonomyValueName,
+      fieldDefinitions:
+        fieldDefinitions.map(
+          (field) => ({
+            key: field?.key,
+            required: field?.required,
+            type:
+              field?.type?.name,
+          })
+        ),
     }
   );
 
