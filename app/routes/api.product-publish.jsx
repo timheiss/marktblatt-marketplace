@@ -400,14 +400,17 @@ async function findShopifyTaxonomyMetaobject(
       ?.metaobjectDefinitionByType ||
     null;
 
-  console.log(
-    "SHOPIFY TAXONOMY METAOBJECT DEFINITION:",
+console.log(
+  "SHOPIFY TAXONOMY METAOBJECT DEFINITION:",
+  JSON.stringify(
     {
       metaobjectType,
-      definition:
-        metaobjectDefinition,
-    }
-  );
+      definition: metaobjectDefinition,
+    },
+    null,
+    2
+  )
+);
 
 const simpleTaxonomyMetaobjectTypes =
   new Set([
