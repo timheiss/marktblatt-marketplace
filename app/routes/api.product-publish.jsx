@@ -274,6 +274,14 @@ async function findShopifyTaxonomyMetaobject(
                 ) {
                   value
                 }
+
+colorTaxonomyReference:
+  field(
+    key: "color_taxonomy_reference"
+  ) {
+    value
+  }
+
             }
           }
         }
