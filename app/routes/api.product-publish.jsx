@@ -875,6 +875,20 @@ console.log(
       ?.standardMetafieldDefinitionTemplates
       ?.nodes || [];
 
+console.log(
+  "SHOPIFY CATEGORY STANDARD METAFIELD TEMPLATES:",
+  standardTemplates.map(
+    (template) => ({
+      id: template.id,
+      name: template.name,
+      namespace: template.namespace,
+      key: template.key,
+      ownerTypes: template.ownerTypes,
+      type: template?.type?.name,
+    })
+  )
+);
+
   const metafields = [];
 
   /*
