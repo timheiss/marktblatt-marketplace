@@ -302,6 +302,20 @@ async function findShopifyTaxonomyMetaobject(
       ?.metaobjects
       ?.nodes || [];
 
+if (
+  metaobjectType ===
+  "shopify--color-pattern"
+) {
+  console.log(
+    "SHOPIFY COLOR METAOBJECT LOOKUP:",
+    JSON.stringify(
+      metaobjects,
+      null,
+      2
+    )
+  );
+}
+
 const existingMetaobject =
   metaobjects.find(
     (metaobject) => {
