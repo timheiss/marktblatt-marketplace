@@ -310,20 +310,6 @@ colorTaxonomyReference:
       ?.metaobjects
       ?.nodes || [];
 
-if (
-  metaobjectType ===
-  "shopify--color-pattern"
-) {
-  console.log(
-    "SHOPIFY COLOR METAOBJECT LOOKUP:",
-    JSON.stringify(
-      metaobjects,
-      null,
-      2
-    )
-  );
-}
-
 const existingMetaobject =
   metaobjects.find(
     (metaobject) => {
@@ -874,20 +860,6 @@ console.log(
     templatesResult?.data
       ?.standardMetafieldDefinitionTemplates
       ?.nodes || [];
-
-console.log(
-  "SHOPIFY CATEGORY STANDARD METAFIELD TEMPLATES:",
-  standardTemplates.map(
-    (template) => ({
-      id: template.id,
-      name: template.name,
-      namespace: template.namespace,
-      key: template.key,
-      ownerTypes: template.ownerTypes,
-      type: template?.type?.name,
-    })
-  )
-);
 
   const metafields = [];
 
