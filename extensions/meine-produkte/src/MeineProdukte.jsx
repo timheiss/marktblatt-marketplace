@@ -1308,91 +1308,42 @@ async function changeAllProductStatuses(status) {
                   Das Bild gilt für alle Ihre Produkte auf Marktblatt.
                 </s-text>
 
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-onChange={(event) => {
-  const file =
-    event.currentTarget.files?.[0] ??
-    null;
+               <s-drop-zone
+  label="Hintergrundbild auswählen"
+  accessibilityLabel="Hintergrundbild für Über den Anbieter auswählen"
+  accept="image/jpeg,image/png,image/webp"
+  disabled={uploadingVendorBackgroundImage}
+  onChange={(event) => {
+    const file =
+      event.currentTarget.files?.[0] ??
+      null;
 
-  if (!file) {
-    setVendorBackgroundImage(null);
-    return;
-  }
-
-  if (file.size > 10 * 1024 * 1024) {
-    setVendorBackgroundImage(null);
-    setError(
-      'Das Bild darf maximal 10 MB groß sein.'
-    );
-    return;
-  }
-
-  const image =
-    new Image();
-
-  image.onload = () => {
-    const width = image.width;
-    const height = image.height;
-    const ratio = width / height;
-
-    URL.revokeObjectURL(image.src);
-
-    if (
-      width < 1200 ||
-      height < 675
-    ) {
+    if (!file) {
       setVendorBackgroundImage(null);
-      setError(
-        'Das Bild muss mindestens 1200 × 675 Pixel groß sein.'
-      );
       return;
     }
 
-    if (
-      width > 6000 ||
-      height > 4000
-    ) {
+    if (file.size > 10 * 1024 * 1024) {
       setVendorBackgroundImage(null);
-      setError(
-        'Das Bild darf maximal 6000 × 4000 Pixel groß sein.'
-      );
-      return;
-    }
 
-    /*
-     * Querformat ungefähr 16:9.
-     * Erlaubter Bereich ca. 1,5 bis 2,0.
-     */
-    if (
-      ratio < 1.5 ||
-      ratio > 2.0
-    ) {
-      setVendorBackgroundImage(null);
       setError(
-        'Bitte verwenden Sie ein Bild im Querformat, idealerweise im Format 16:9.'
+        'Das Bild darf maximal 10 MB groß sein.'
       );
+
       return;
     }
 
     setError(null);
     setVendorBackgroundImage(file);
-  };
-
-  image.onerror = () => {
-    URL.revokeObjectURL(image.src);
-
+  }}
+  onDropRejected={() => {
     setVendorBackgroundImage(null);
-    setError(
-      'Das ausgewählte Bild konnte nicht gelesen werden.'
-    );
-  };
 
-  image.src =
-    URL.createObjectURL(file);
-}}
-                />
+    setError(
+      'Bitte verwenden Sie ausschließlich ein JPG-, PNG- oder WebP-Bild.'
+    );
+  }}
+/>
 
                 <s-text>
                   Erlaubt sind JPG, PNG und WebP mit maximal 10 MB.
