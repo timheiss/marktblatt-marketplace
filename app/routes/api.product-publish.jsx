@@ -1,4 +1,4 @@
-import db from "../db.server";
+﻿import db from "../db.server";
 import {
   authenticate,
   unauthenticated,
@@ -85,7 +85,7 @@ function parseImages(value) {
 
 /*
  * =========================================================
- * BILDER FÜR SHOPIFY VORBEREITEN
+ * BILDER FÃœR SHOPIFY VORBEREITEN
  * =========================================================
  */
 
@@ -137,7 +137,7 @@ function prepareMedia(product) {
         break;
       }
     } catch {
-      // Ungültige Bild-URL ignorieren.
+      // UngÃ¼ltige Bild-URL ignorieren.
     }
   }
 
@@ -227,7 +227,7 @@ return {
  * SHOPIFY STANDARD-METAOBJECT SUCHEN
  * =========================================================
  *
- * Ein Shopify-Taxonomie-Wert wird über das Feld
+ * Ein Shopify-Taxonomie-Wert wird Ã¼ber das Feld
  * "taxonomy_reference" mit einem Standard-Metaobject
  * verbunden.
  */
@@ -315,7 +315,7 @@ const existingMetaobject =
     (metaobject) => {
       /*
        * Normale Shopify-Taxonomie-Metaobjects:
-       * taxonomy_reference enthält eine einzelne
+       * taxonomy_reference enthÃ¤lt eine einzelne
        * TaxonomyValue-GID.
        */
       if (
@@ -381,11 +381,11 @@ const existingMetaobject =
    * 2. FEHLENDES STANDARD-METAOBJECT ERSTELLEN
    * =======================================================
    *
-   * Vorerst ausschließlich Fabric.
+   * Vorerst ausschlieÃŸlich Fabric.
    *
-   * Für shopify--fabric wurden die Pflichtfelder
-   * label und taxonomy_reference über die echte
-   * Shopify-Definition bestätigt.
+   * FÃ¼r shopify--fabric wurden die Pflichtfelder
+   * label und taxonomy_reference Ã¼ber die echte
+   * Shopify-Definition bestÃ¤tigt.
    */
 
   /*
@@ -720,10 +720,10 @@ async function prepareShopifyTaxonomyMetafields(
    * 1. KATEGORIE-METAFIELD-DEFINITIONEN LADEN
    * =======================================================
    *
-   * Shopify liefert nur die Metafields, die für die
-   * tatsächlich erkannte Produktkategorie gelten.
+   * Shopify liefert nur die Metafields, die fÃ¼r die
+   * tatsÃ¤chlich erkannte Produktkategorie gelten.
    *
-   * Dadurch funktioniert dies dynamisch für Schmuck,
+   * Dadurch funktioniert dies dynamisch fÃ¼r Schmuck,
    * Handys, Werkzeuge usw.
    */
 
@@ -803,9 +803,9 @@ console.log(
    * NOCH NICHT AKTIVIERTE SHOPIFY-STANDARDTEMPLATES LADEN
    * =======================================================
    *
-   * Falls ein Taxonomieattribut für die Produktkategorie
+   * Falls ein Taxonomieattribut fÃ¼r die Produktkategorie
    * existiert, aber die entsprechende Metafield-Definition
-   * im Shop noch nicht aktiviert wurde, können wir hier das
+   * im Shop noch nicht aktiviert wurde, kÃ¶nnen wir hier das
    * offizielle Shopify-Template finden.
    */
 
@@ -1019,8 +1019,8 @@ console.log(
       }
 
       /*
-       * Auch für weitere Attribute derselben Veröffentlichung
-       * verfügbar machen.
+       * Auch fÃ¼r weitere Attribute derselben VerÃ¶ffentlichung
+       * verfÃ¼gbar machen.
        */
       productDefinitions.push(definition);
 
@@ -1037,7 +1037,7 @@ console.log(
     }
 
     /*
-     * Aktuell verarbeiten wir ausschließlich
+     * Aktuell verarbeiten wir ausschlieÃŸlich
      * Shopify-Standardfelder, die als Liste von
      * Metaobject-Referenzen gespeichert werden.
      */
@@ -1083,7 +1083,7 @@ console.log(
      * shopify.target-gender
      *        -> shopify--target-gender
      *
-     * Color ist ein bestätigter Sonderfall:
+     * Color ist ein bestÃ¤tigter Sonderfall:
      *
      * shopify.color-pattern
      *        -> shopify--color-pattern
@@ -1096,7 +1096,7 @@ console.log(
 
     /*
      * =====================================================
-     * 4. TAXONOMIEWERTE IN METAOBJECTS AUFLÖSEN
+     * 4. TAXONOMIEWERTE IN METAOBJECTS AUFLÃ–SEN
      * =====================================================
      */
 
@@ -1233,11 +1233,11 @@ export const action = async ({ request }) => {
 
     /*
      * =====================================================
-     * 2. NUR PRODUKT-ID AUS REQUEST ÜBERNEHMEN
+     * 2. NUR PRODUKT-ID AUS REQUEST ÃœBERNEHMEN
      * =====================================================
      *
      * Produktdaten wie Preis, URL oder Anbieter werden
-     * NICHT aus dem Browser übernommen.
+     * NICHT aus dem Browser Ã¼bernommen.
      */
 
     const body =
@@ -1267,8 +1267,8 @@ export const action = async ({ request }) => {
      * 3. PRODUKT AUS POSTGRESQL LADEN
      * =====================================================
      *
-     * Gleichzeitig wird geprüft, ob das Produkt wirklich
-     * dem angemeldeten Anbieter gehört.
+     * Gleichzeitig wird geprÃ¼ft, ob das Produkt wirklich
+     * dem angemeldeten Anbieter gehÃ¶rt.
      */
 
     const product =
@@ -1291,7 +1291,7 @@ export const action = async ({ request }) => {
           {
             success: false,
             error:
-              "Produkt wurde nicht gefunden oder gehört nicht zu diesem Anbieter.",
+              "Produkt wurde nicht gefunden oder gehÃ¶rt nicht zu diesem Anbieter.",
           },
           {
             status: 404,
@@ -1303,7 +1303,7 @@ export const action = async ({ request }) => {
 
     /*
      * =====================================================
-     * 4. DOPPELTE VERÖFFENTLICHUNG VERHINDERN
+     * 4. DOPPELTE VERÃ–FFENTLICHUNG VERHINDERN
      * =====================================================
      */
 
@@ -1314,7 +1314,7 @@ export const action = async ({ request }) => {
             success: false,
 
             error:
-              "Dieses Produkt wurde bereits an Marktblatt übertragen.",
+              "Dieses Produkt wurde bereits an Marktblatt Ã¼bertragen.",
 
             product: {
               id:
@@ -1340,7 +1340,7 @@ export const action = async ({ request }) => {
 
     /*
      * =====================================================
-     * 5. AKTIVES PAKET PRÜFEN
+     * 5. AKTIVES PAKET PRÃœFEN
      * =====================================================
      */
 
@@ -1357,7 +1357,7 @@ export const action = async ({ request }) => {
           {
             success: false,
             error:
-              "Für diesen Anbieter wurde kein Marktblatt-Paket gefunden.",
+              "FÃ¼r diesen Anbieter wurde kein Marktblatt-Paket gefunden.",
           },
           {
             status: 403,
@@ -1387,7 +1387,7 @@ export const action = async ({ request }) => {
      * 6. MARKTBLATT-SHOP FESTLEGEN
      * =====================================================
      *
-     * Die Domain kommt ausschließlich aus der
+     * Die Domain kommt ausschlieÃŸlich aus der
      * serverseitigen Umgebungsvariable.
      */
 
@@ -1406,17 +1406,17 @@ export const action = async ({ request }) => {
       )
     ) {
       throw new Error(
-        "MARKTBLATT_SHOP enthält keine gültige Shopify-Shop-Domain."
+        "MARKTBLATT_SHOP enthÃ¤lt keine gÃ¼ltige Shopify-Shop-Domain."
       );
     }
 
 
     /*
      * =====================================================
-     * 7. ADMIN-API FÜR MARKTBLATT.ONLINE LADEN
+     * 7. ADMIN-API FÃœR MARKTBLATT.ONLINE LADEN
      * =====================================================
      *
-     * Dafür wird die bereits gespeicherte Offline-Session
+     * DafÃ¼r wird die bereits gespeicherte Offline-Session
      * des Marktblatt-Shops verwendet.
      */
 
@@ -1486,7 +1486,7 @@ const validCompareAtPrice =
 
 /*
  * =====================================================
- * ZUSÄTZLICHE SHOPIFY-PRODUKTDATEN
+ * ZUSÃ„TZLICHE SHOPIFY-PRODUKTDATEN
  * =====================================================
  */
 
@@ -1526,8 +1526,8 @@ const shopifyTaxonomyId =
  * ANBIETERPROFIL LADEN
  * =========================================================
  *
- * Anbieterbezogene Daten werden beim Veröffentlichen
- * automatisch auf das Shopify-Produkt übertragen.
+ * Anbieterbezogene Daten werden beim VerÃ¶ffentlichen
+ * automatisch auf das Shopify-Produkt Ã¼bertragen.
  */
 
 const vendorProfile =
@@ -1582,7 +1582,7 @@ const metaDescription =
 
 
     /*
-     * ORIGINAL-URL PRÜFEN
+     * ORIGINAL-URL PRÃœFEN
      */
 
     let sourceUrl;
@@ -1609,7 +1609,7 @@ const metaDescription =
           {
             success: false,
             error:
-              "Die gespeicherte Original-Produkt-URL ist ungültig.",
+              "Die gespeicherte Original-Produkt-URL ist ungÃ¼ltig.",
           },
           {
             status: 400,
@@ -1736,7 +1736,7 @@ const metaDescription =
 ),
 
               /*
-               * Anbieterprodukte zunächst immer
+               * Anbieterprodukte zunÃ¤chst immer
                * als Entwurf anlegen.
                */
               status:
@@ -1746,7 +1746,7 @@ const metaDescription =
 ...shopifyTaxonomyMetafields,
 
 /*
- * Hintergrundbild für "Über den Anbieter".
+ * Hintergrundbild fÃ¼r "Ãœber den Anbieter".
  *
  * Das Bild liegt bereits in Shopify Files.
  * Deshalb wird hier nur die MediaImage-GID
@@ -1777,7 +1777,7 @@ const metaDescription =
  */
 
 /*
- * Informationen über den Anbieter
+ * Informationen Ã¼ber den Anbieter
  */
 ...(vendorProfile?.companyDescription
   ? [
@@ -1865,7 +1865,7 @@ const metaDescription =
           url: String(
             vendorProfile.homepageUrl
           ),
-          label: "Homepage",
+          text: "Homepage",
         }),
       },
     ]
@@ -1887,7 +1887,7 @@ const metaDescription =
           url: String(
             vendorProfile.imprintUrl
           ),
-          label: "Impressum",
+          text: "Impressum",
         }),
       },
     ]
@@ -1895,7 +1895,7 @@ const metaDescription =
 
 
 /*
- * Widerruf / Rückgabe
+ * Widerruf / RÃ¼ckgabe
  */
 
 ...(vendorProfile?.withdrawalUrl
@@ -1909,7 +1909,7 @@ const metaDescription =
           url: String(
             vendorProfile.withdrawalUrl
           ),
-          label: "Widerruf / Rückgabe",
+          label: "Widerruf / RÃ¼ckgabe",
         }),
       },
     ]
@@ -1931,7 +1931,7 @@ const metaDescription =
           url: String(
             vendorProfile.facebookUrl
           ),
-          label: "Facebook",
+          text: "Facebook",
         }),
       },
     ]
@@ -1953,7 +1953,7 @@ const metaDescription =
           url: String(
             vendorProfile.instagramUrl
           ),
-          label: "Instagram",
+          text: "Instagram",
         }),
       },
     ]
@@ -1975,7 +1975,7 @@ const metaDescription =
           url: String(
             vendorProfile.tiktokUrl
           ),
-          label: "TikTok",
+          text: "TikTok",
         }),
       },
     ]
@@ -1997,7 +1997,7 @@ const metaDescription =
           url: String(
             vendorProfile.youtubeUrl
           ),
-          label: "YouTube",
+          text: "YouTube",
         }),
       },
     ]
@@ -2091,7 +2091,7 @@ const metaDescription =
 
     /*
      * =====================================================
-     * 10. GRAPHQL-FEHLER PRÜFEN
+     * 10. GRAPHQL-FEHLER PRÃœFEN
      * =====================================================
      */
 
@@ -2153,7 +2153,7 @@ const metaDescription =
 
     if (!createdProduct) {
       throw new Error(
-        "Shopify hat kein Produkt zurückgegeben."
+        "Shopify hat kein Produkt zurÃ¼ckgegeben."
       );
     }
 
@@ -2338,7 +2338,7 @@ variants: [
         success: true,
 
         message:
-          "Produkt wurde als Entwurf an Marktblatt.online übertragen.",
+          "Produkt wurde als Entwurf an Marktblatt.online Ã¼bertragen.",
 
         product: {
           id:
@@ -2389,7 +2389,7 @@ variants: [
           error:
             error instanceof Error
               ? error.message
-              : "Produkt konnte nicht veröffentlicht werden.",
+              : "Produkt konnte nicht verÃ¶ffentlicht werden.",
         },
         {
           status: 500,
@@ -2405,7 +2405,7 @@ variants: [
  * OPTIONS / GET
  * =========================================================
  *
- * CORS-Unterstützung für die Shopify
+ * CORS-UnterstÃ¼tzung fÃ¼r die Shopify
  * Customer Account Extension.
  */
 
