@@ -904,6 +904,122 @@ async function changeAllProductStatuses(status) {
     }
   }
 
+  /*
+   * =======================================================
+   * ANBIETERINFORMATIONEN SPEICHERN
+   * =======================================================
+   */
+
+  async function saveVendorProfile() {
+    try {
+      setSavingVendorProfile(true);
+      setError(null);
+      setSaveMessage(null);
+
+      const token =
+        await shopify.sessionToken.get();
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/vendor-profile`,
+        {
+          method: 'POST',
+
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+
+          body: JSON.stringify({
+            profile: {
+              companyDescription:
+                vendorProfile.companyDescription,
+
+              discountCode:
+                vendorProfile.discountCode,
+
+              discountPercent:
+                vendorProfile.discountPercent,
+
+              discountMinimumOrderValue:
+                vendorProfile.discountMinimumOrderValue,
+            },
+          }),
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            'Anbieterinformationen konnten nicht gespeichert werden.'
+        );
+      }
+
+      const profile =
+        data.profile || {};
+
+      setVendorProfile((current) => ({
+        ...current,
+
+        companyDescription:
+          profile.companyDescription || '',
+
+        backgroundImageId:
+          profile.backgroundImageId || null,
+
+        discountCode:
+          profile.discountCode || '',
+
+        discountPercent:
+          profile.discountPercent ?? '',
+
+        discountMinimumOrderValue:
+          profile.discountMinimumOrderValue || '',
+
+        homepageUrl:
+          profile.homepageUrl || '',
+
+        imprintUrl:
+          profile.imprintUrl || '',
+
+        withdrawalUrl:
+          profile.withdrawalUrl || '',
+
+        facebookUrl:
+          profile.facebookUrl || '',
+
+        instagramUrl:
+          profile.instagramUrl || '',
+
+        tiktokUrl:
+          profile.tiktokUrl || '',
+
+        youtubeUrl:
+          profile.youtubeUrl || '',
+      }));
+
+      setSaveMessage(
+        'Anbieterinformationen wurden gespeichert.'
+      );
+
+    } catch (err) {
+      console.error(
+        'VENDOR PROFILE SAVE ERROR:',
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Anbieterinformationen konnten nicht gespeichert werden.'
+      );
+
+    } finally {
+      setSavingVendorProfile(false);
+    }
+  }
 
   /*
    * =======================================================
@@ -1039,6 +1155,138 @@ async function changeAllProductStatuses(status) {
 
 </s-section>
 
+        {/* ANBIETERINFORMATIONEN */}
+
+        <s-section heading="Anbieterinformationen">
+
+          <s-stack
+            direction="block"
+            gap="base"
+          >
+
+            <s-text>
+              Diese Angaben gelten für alle Ihre Produkte
+              auf Marktblatt.
+            </s-text>
+
+            {loadingVendorProfile ? (
+              <s-text>
+                Anbieterinformationen werden geladen...
+              </s-text>
+            ) : (
+              <>
+
+                <s-text-field
+                  label="Informationen über den Anbieter"
+                  value={
+                    vendorProfile.companyDescription
+                  }
+                  onInput={(event) => {
+                    setVendorProfile(
+                      (current) => ({
+                        ...current,
+                        companyDescription:
+                          event.currentTarget.value,
+                      })
+                    );
+                  }}
+                />
+
+                <s-text>
+                  Beschreiben Sie Ihr Unternehmen und Ihr
+                  Angebot. Diese Informationen können auf
+                  Ihren Produktseiten angezeigt werden.
+                </s-text>
+
+
+                <s-box paddingBlockStart="base">
+                  <s-text type="strong">
+                    Rabatt für Marktblatt-Kunden
+                  </s-text>
+                </s-box>
+
+                <s-text-field
+                  label="Rabattcode"
+                  value={
+                    vendorProfile.discountCode
+                  }
+                  onInput={(event) => {
+                    setVendorProfile(
+                      (current) => ({
+                        ...current,
+                        discountCode:
+                          event.currentTarget.value,
+                      })
+                    );
+                  }}
+                />
+
+                <s-text>
+                  Der Rabattcode gilt für alle Produkte,
+                  die Sie auf Marktblatt anbieten. Legen
+                  Sie denselben Rabattcode deshalb auch
+                  in Ihrem eigenen Onlineshop an.
+                </s-text>
+
+                <s-text-field
+                  label="Rabatt in %"
+                  type="number"
+                  value={
+                    vendorProfile.discountPercent
+                  }
+                  onInput={(event) => {
+                    setVendorProfile(
+                      (current) => ({
+                        ...current,
+                        discountPercent:
+                          event.currentTarget.value,
+                      })
+                    );
+                  }}
+                />
+
+                <s-text-field
+                  label="Mindestbestellwert für Rabattcode"
+                  type="number"
+                  value={
+                    vendorProfile
+                      .discountMinimumOrderValue
+                  }
+                  onInput={(event) => {
+                    setVendorProfile(
+                      (current) => ({
+                        ...current,
+                        discountMinimumOrderValue:
+                          event.currentTarget.value,
+                      })
+                    );
+                  }}
+                />
+
+                <s-text>
+                  Geben Sie den Mindestbestellwert an, ab
+                  dem der Rabattcode in Ihrem Onlineshop
+                  verwendet werden kann. Gibt es keinen
+                  Mindestbestellwert, lassen Sie das Feld
+                  leer.
+                </s-text>
+
+                <s-button
+                  variant="primary"
+                  onClick={saveVendorProfile}
+                  disabled={savingVendorProfile}
+                >
+                  {savingVendorProfile
+                    ? 'Wird gespeichert...'
+                    : 'Anbieterinformationen speichern'}
+                </s-button>
+
+              </>
+            )}
+
+          </s-stack>
+
+        </s-section>
 
         {/* NEUES PRODUKT */}
 
