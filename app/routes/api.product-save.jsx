@@ -526,6 +526,143 @@ const images =
     product.images
   );
 
+/*
+ * =========================================================
+ * AUTOMATISCH ERMITTELTE ANBIETER-LINKS SPEICHERN
+ * =========================================================
+ *
+ * Die Links wurden zuvor beim Prüfen der Produktseite
+ * automatisch vom Scraper ermittelt.
+ *
+ * Vorhandene Rabattinformationen, Firmenbeschreibung
+ * und Hintergrundbild werden dadurch nicht verändert.
+ */
+
+const vendorLinks =
+  product.vendorLinks &&
+  typeof product.vendorLinks === "object" &&
+  !Array.isArray(product.vendorLinks)
+    ? product.vendorLinks
+    : null;
+
+if (vendorLinks) {
+  const homepageUrl =
+    optionalText(
+      vendorLinks.homepageUrl
+    );
+
+  const imprintUrl =
+    optionalText(
+      vendorLinks.imprintUrl
+    );
+
+  const withdrawalUrl =
+    optionalText(
+      vendorLinks.withdrawalUrl
+    );
+
+  const facebookUrl =
+    optionalText(
+      vendorLinks.facebookUrl
+    );
+
+  const instagramUrl =
+    optionalText(
+      vendorLinks.instagramUrl
+    );
+
+  const tiktokUrl =
+    optionalText(
+      vendorLinks.tiktokUrl
+    );
+
+  const youtubeUrl =
+    optionalText(
+      vendorLinks.youtubeUrl
+    );
+
+
+  /*
+   * Nur tatsächlich gefundene Werte aktualisieren.
+   *
+   * Dadurch überschreibt ein späterer Scrape,
+   * bei dem z. B. kein YouTube-Link gefunden wird,
+   * einen bereits gespeicherten YouTube-Link nicht.
+   */
+
+  const vendorLinkData = {};
+
+  if (homepageUrl) {
+    vendorLinkData.homepageUrl =
+      homepageUrl;
+  }
+
+  if (imprintUrl) {
+    vendorLinkData.imprintUrl =
+      imprintUrl;
+  }
+
+  if (withdrawalUrl) {
+    vendorLinkData.withdrawalUrl =
+      withdrawalUrl;
+  }
+
+  if (facebookUrl) {
+    vendorLinkData.facebookUrl =
+      facebookUrl;
+  }
+
+  if (instagramUrl) {
+    vendorLinkData.instagramUrl =
+      instagramUrl;
+  }
+
+  if (tiktokUrl) {
+    vendorLinkData.tiktokUrl =
+      tiktokUrl;
+  }
+
+  if (youtubeUrl) {
+    vendorLinkData.youtubeUrl =
+      youtubeUrl;
+  }
+
+
+  /*
+   * Nur speichern, wenn mindestens ein Link
+   * gefunden wurde.
+   */
+
+  if (
+    Object.keys(
+      vendorLinkData
+    ).length > 0
+  ) {
+    await db.vendorProfile.upsert({
+      where: {
+        customerId,
+      },
+
+      create: {
+        customerId,
+        ...vendorLinkData,
+      },
+
+      update: {
+        ...vendorLinkData,
+      },
+    });
+
+    console.log(
+      "VENDOR LINKS SAVED:",
+      {
+        customerId,
+        ...vendorLinkData,
+      }
+    );
+  }
+}
+
     /*
      * =====================================================
      * PRODUKT SPEICHERN
