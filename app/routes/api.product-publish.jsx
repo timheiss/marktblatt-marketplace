@@ -1895,7 +1895,7 @@ const metaDescription =
 
 
 /*
- * Widerruf / RÃ¼ckgabe
+ * Widerruf / Rückgabe
  */
 
 ...(vendorProfile?.withdrawalUrl
@@ -1909,7 +1909,7 @@ const metaDescription =
           url: String(
             vendorProfile.withdrawalUrl
           ),
-          label: "Widerruf / RÃ¼ckgabe",
+          text: "Widerruf / Rückgabe",
         }),
       },
     ]
