@@ -1521,6 +1521,29 @@ const shopifyTaxonomyId =
       ).trim()
     : null;
 
+/*
+ * =========================================================
+ * ANBIETERPROFIL LADEN
+ * =========================================================
+ *
+ * Anbieterbezogene Daten werden beim Veröffentlichen
+ * automatisch auf das Shopify-Produkt übertragen.
+ */
+
+const vendorProfile =
+  await db.vendorProfile.findUnique({
+    where: {
+      customerId,
+    },
+  });
+
+const vendorBackgroundImageId =
+  vendorProfile?.backgroundImageId
+    ? String(
+        vendorProfile.backgroundImageId
+      ).trim()
+    : null;
+
 const shopifyTaxonomyAttributes =
   parseShopifyTaxonomyAttributes(
     product.shopifyTaxonomyAttributes
@@ -1721,6 +1744,31 @@ const metaDescription =
 
               metafields: [
 ...shopifyTaxonomyMetafields,
+
+/*
+ * Hintergrundbild für "Über den Anbieter".
+ *
+ * Das Bild liegt bereits in Shopify Files.
+ * Deshalb wird hier nur die MediaImage-GID
+ * als file_reference gespeichert.
+ */
+...(vendorBackgroundImageId
+  ? [
+      {
+        namespace:
+          "custom",
+
+        key:
+          "hintergrundbild_fur_uber_den_anbieter",
+
+        type:
+          "file_reference",
+
+        value:
+          vendorBackgroundImageId,
+      },
+    ]
+  : []),
 
                 {
                   namespace:
