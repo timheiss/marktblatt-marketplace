@@ -3,6 +3,18 @@ import { authenticate } from "../shopify.server";
 
 /*
  * =========================================================
+ * CORS
+ * =========================================================
+ */
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+};
+
+/*
+ * =========================================================
  * ANBIETERPROFIL
  * =========================================================
  *
@@ -113,6 +125,20 @@ function formatProfile(profile) {
  */
 
 export const loader = async ({ request }) => {
+
+  /*
+   * =======================================================
+   * CORS PREFLIGHT
+   * =======================================================
+   */
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
+  }
+
   let cors = (response) => response;
 
   try {
@@ -182,6 +208,20 @@ export const loader = async ({ request }) => {
  */
 
 export const action = async ({ request }) => {
+
+  /*
+   * =======================================================
+   * CORS PREFLIGHT
+   * =======================================================
+   */
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
+  }
+
   let cors = (response) => response;
 
   try {
