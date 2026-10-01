@@ -1501,11 +1501,14 @@ async function changeAllProductStatuses(status) {
                 : 'Produkt prüfen'}
             </s-button>
 
-            {error && (
-              <s-text>
-                {error}
-              </s-text>
-            )}
+{error && (
+  <s-banner
+    tone="critical"
+    heading="Fehler"
+  >
+    {error}
+  </s-banner>
+)}
 
           </s-stack>
 
@@ -1664,17 +1667,16 @@ async function changeAllProductStatuses(status) {
 
         )}
 
-        {/* ERFOLGSMELDUNG */}
+{/* ERFOLGSMELDUNG */}
 
-        {saveMessage && (
-
-          <s-section heading="Erfolgreich">
-            <s-text>
-              {saveMessage}
-            </s-text>
-          </s-section>
-
-        )}
+{saveMessage && (
+  <s-banner
+    tone="success"
+    heading="Erfolgreich"
+  >
+    {saveMessage}
+  </s-banner>
+)}
 
 
         {/* PRODUKTLISTE */}
