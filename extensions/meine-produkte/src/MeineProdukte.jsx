@@ -95,14 +95,134 @@ const [bulkStatusAction, setBulkStatusAction] =
 
   /*
    * =======================================================
+   * ANBIETERINFORMATIONEN
+   * =======================================================
+   */
+
+  const [vendorProfile, setVendorProfile] =
+    useState({
+      companyDescription: '',
+      backgroundImageId: null,
+      discountCode: '',
+      discountPercent: '',
+      discountMinimumOrderValue: '',
+      homepageUrl: '',
+      imprintUrl: '',
+      withdrawalUrl: '',
+      facebookUrl: '',
+      instagramUrl: '',
+      tiktokUrl: '',
+      youtubeUrl: '',
+    });
+
+  const [loadingVendorProfile, setLoadingVendorProfile] =
+    useState(true);
+
+  const [savingVendorProfile, setSavingVendorProfile] =
+    useState(false);
+
+  /*
+   * =======================================================
    * START
    * =======================================================
    */
 
   useEffect(() => {
     loadProducts();
+    loadVendorProfile();
   }, []);
 
+  /*
+   * =======================================================
+   * ANBIETERINFORMATIONEN LADEN
+   * =======================================================
+   */
+
+  async function loadVendorProfile() {
+    try {
+      setLoadingVendorProfile(true);
+
+      const token =
+        await shopify.sessionToken.get();
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/vendor-profile`,
+        {
+          method: 'GET',
+
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            'Anbieterinformationen konnten nicht geladen werden.'
+        );
+      }
+
+      const profile =
+        data.profile || {};
+
+      setVendorProfile({
+        companyDescription:
+          profile.companyDescription || '',
+
+        backgroundImageId:
+          profile.backgroundImageId || null,
+
+        discountCode:
+          profile.discountCode || '',
+
+        discountPercent:
+          profile.discountPercent ?? '',
+
+        discountMinimumOrderValue:
+          profile.discountMinimumOrderValue || '',
+
+        homepageUrl:
+          profile.homepageUrl || '',
+
+        imprintUrl:
+          profile.imprintUrl || '',
+
+        withdrawalUrl:
+          profile.withdrawalUrl || '',
+
+        facebookUrl:
+          profile.facebookUrl || '',
+
+        instagramUrl:
+          profile.instagramUrl || '',
+
+        tiktokUrl:
+          profile.tiktokUrl || '',
+
+        youtubeUrl:
+          profile.youtubeUrl || '',
+      });
+
+    } catch (err) {
+      console.error(
+        'VENDOR PROFILE LOAD ERROR:',
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Anbieterinformationen konnten nicht geladen werden.'
+      );
+
+    } finally {
+      setLoadingVendorProfile(false);
+    }
+  }
 
   /*
    * =======================================================
