@@ -72,6 +72,69 @@ model Subscription {
 
 /**
  * =========================================================
+ * ANBIETERPROFIL
+ * =========================================================
+ * Zentrale Informationen eines Anbieters.
+ * Diese Daten gehören nicht zu einem einzelnen Produkt.
+ * Beim Veröffentlichen werden die benötigten Angaben
+ * automatisch in die Produkt-Metafelder übernommen.
+ */
+
+model VendorProfile {
+  id String @id @default(cuid())
+
+  /**
+   * Eigentümer / Shopify-Kunde
+   */
+
+  customerId    String  @unique
+  customerEmail String?
+
+  /**
+   * Vom Anbieter gepflegte Informationen
+   */
+
+  companyDescription String?
+
+  // Shopify File GID des Hintergrundbildes.
+  // Beispiel:
+  // gid://shopify/MediaImage/123456789
+  backgroundImageId String?
+
+  discountCode String?
+
+  // Prozentwert, z. B. 10 für 10 %
+  discountPercent Int?
+
+  // Zunächst als String, passend zu unserem bisherigen
+  // Umgang mit Geldwerten und der vorhandenen
+  // Produkt-Metafelddefinition.
+  discountMinimumOrderValue String?
+
+  /**
+   * Automatisch ermittelbare Anbieterinformationen
+   */
+
+  homepageUrl   String?
+  imprintUrl    String?
+  withdrawalUrl String?
+  facebookUrl   String?
+  instagramUrl  String?
+  tiktokUrl     String?
+  youtubeUrl    String?
+
+  /**
+   * Verwaltung
+   */
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+}
+
+/**
+ * =========================================================
  * MARKTBLATT PRODUKTE
  * =========================================================
  */
@@ -112,26 +175,26 @@ model MarketplaceProduct {
   mpn      String?
   category String?
 
-// Standardisierte Shopify Product Taxonomy
-shopifyTaxonomyId   String?
-shopifyTaxonomyName String?
+  // Standardisierte Shopify Product Taxonomy
+  shopifyTaxonomyId   String?
+  shopifyTaxonomyName String?
 
-// Offizielle, validierte Shopify-Kategorieattribute.
-// Beispiel:
-// [
-//   {
-//     "attributeName": "Color",
-//     "values": [
-//       {
-//         "id": "gid://shopify/TaxonomyValue/4",
-//         "name": "Gold"
-//       }
-//     ]
-//   }
-// ]
-shopifyTaxonomyAttributes Json?
+  // Offizielle, validierte Shopify-Kategorieattribute.
+  // Beispiel:
+  // [
+  //   {
+  //     "attributeName": "Color",
+  //     "values": [
+  //       {
+  //         "id": "gid://shopify/TaxonomyValue/4",
+  //         "name": "Gold"
+  //       }
+  //     ]
+  //   }
+  // ]
+  shopifyTaxonomyAttributes Json?
 
-productType String?
+  productType String?
   material    String?
   color       String?
   size        String?
