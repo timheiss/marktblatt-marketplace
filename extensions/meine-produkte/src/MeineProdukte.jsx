@@ -123,6 +123,20 @@ const [bulkStatusAction, setBulkStatusAction] =
 
   /*
    * =======================================================
+   * ANBIETER-HINTERGRUNDBILD
+   * =======================================================
+   */
+
+  const [vendorBackgroundImage, setVendorBackgroundImage] =
+    useState(null);
+
+  const [
+    uploadingVendorBackgroundImage,
+    setUploadingVendorBackgroundImage,
+  ] = useState(false);
+
+  /*
+   * =======================================================
    * START
    * =======================================================
    */
@@ -906,6 +920,91 @@ async function changeAllProductStatuses(status) {
 
   /*
    * =======================================================
+   * ANBIETER-HINTERGRUNDBILD HOCHLADEN
+   * =======================================================
+   */
+
+  async function uploadVendorBackgroundImage() {
+    try {
+      setUploadingVendorBackgroundImage(true);
+      setError(null);
+      setSaveMessage(null);
+
+      if (!vendorBackgroundImage) {
+        throw new Error(
+          'Bitte wählen Sie zuerst ein Hintergrundbild aus.'
+        );
+      }
+
+      const token =
+        await shopify.sessionToken.get();
+
+      const formData =
+        new FormData();
+
+      formData.append(
+        'image',
+        vendorBackgroundImage
+      );
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/vendor-background-image`,
+        {
+          method: 'POST',
+
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+
+          body: formData,
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            'Das Hintergrundbild konnte nicht hochgeladen werden.'
+        );
+      }
+
+      setVendorProfile(
+        (current) => ({
+          ...current,
+
+          backgroundImageId:
+            data.backgroundImageId ??
+            current.backgroundImageId,
+        })
+      );
+
+      setVendorBackgroundImage(null);
+
+      setSaveMessage(
+        'Hintergrundbild wurde erfolgreich gespeichert.'
+      );
+
+    } catch (err) {
+      console.error(
+        'VENDOR BACKGROUND IMAGE UPLOAD ERROR:',
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Das Hintergrundbild konnte nicht hochgeladen werden.'
+      );
+
+    } finally {
+      setUploadingVendorBackgroundImage(false);
+    }
+  }
+
+  /*
+   * =======================================================
    * ANBIETERINFORMATIONEN SPEICHERN
    * =======================================================
    */
@@ -1193,11 +1292,137 @@ async function changeAllProductStatuses(status) {
                 />
 
                 <s-text>
-                  Beschreiben Sie Ihr Unternehmen und Ihr
-                  Angebot. Diese Informationen können auf
+                  Beschreiben Sie Ihr Unternehmen. Diese Informationen können auf
                   Ihren Produktseiten angezeigt werden.
                 </s-text>
 
+                <s-box paddingBlockStart="base">
+                  <s-text type="strong">
+                    Hintergrundbild für „Über den Anbieter“
+                  </s-text>
+                </s-box>
+
+                <s-text>
+                  Laden Sie ein Hintergrundbild für den Bereich
+                  „Über den Anbieter“ auf Ihren Produktseiten hoch.
+                  Das Bild gilt für alle Ihre Produkte auf Marktblatt.
+                </s-text>
+
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+onChange={(event) => {
+  const file =
+    event.currentTarget.files?.[0] ??
+    null;
+
+  if (!file) {
+    setVendorBackgroundImage(null);
+    return;
+  }
+
+  if (file.size > 10 * 1024 * 1024) {
+    setVendorBackgroundImage(null);
+    setError(
+      'Das Bild darf maximal 10 MB groß sein.'
+    );
+    return;
+  }
+
+  const image =
+    new Image();
+
+  image.onload = () => {
+    const width = image.width;
+    const height = image.height;
+    const ratio = width / height;
+
+    URL.revokeObjectURL(image.src);
+
+    if (
+      width < 1200 ||
+      height < 675
+    ) {
+      setVendorBackgroundImage(null);
+      setError(
+        'Das Bild muss mindestens 1200 × 675 Pixel groß sein.'
+      );
+      return;
+    }
+
+    if (
+      width > 6000 ||
+      height > 4000
+    ) {
+      setVendorBackgroundImage(null);
+      setError(
+        'Das Bild darf maximal 6000 × 4000 Pixel groß sein.'
+      );
+      return;
+    }
+
+    /*
+     * Querformat ungefähr 16:9.
+     * Erlaubter Bereich ca. 1,5 bis 2,0.
+     */
+    if (
+      ratio < 1.5 ||
+      ratio > 2.0
+    ) {
+      setVendorBackgroundImage(null);
+      setError(
+        'Bitte verwenden Sie ein Bild im Querformat, idealerweise im Format 16:9.'
+      );
+      return;
+    }
+
+    setError(null);
+    setVendorBackgroundImage(file);
+  };
+
+  image.onerror = () => {
+    URL.revokeObjectURL(image.src);
+
+    setVendorBackgroundImage(null);
+    setError(
+      'Das ausgewählte Bild konnte nicht gelesen werden.'
+    );
+  };
+
+  image.src =
+    URL.createObjectURL(file);
+}}
+                />
+
+                <s-text>
+                  Erlaubt sind JPG, PNG und WebP mit maximal 10 MB.
+                </s-text>
+
+                {vendorBackgroundImage && (
+                  <s-text>
+                    Ausgewählt: {vendorBackgroundImage.name}
+                  </s-text>
+                )}
+
+                {vendorProfile.backgroundImageId && (
+                  <s-text>
+                    ✓ Ein Hintergrundbild ist bereits hinterlegt.
+                  </s-text>
+                )}
+
+                <s-button
+                  onClick={uploadVendorBackgroundImage}
+                  disabled={
+                    uploadingVendorBackgroundImage ||
+                    !vendorBackgroundImage
+                  }
+                >
+                  {uploadingVendorBackgroundImage
+                    ? 'Bild wird hochgeladen...'
+                    : vendorProfile.backgroundImageId
+                      ? 'Hintergrundbild ersetzen'
+                      : 'Hintergrundbild hochladen'}
+                </s-button>
 
                 <s-box paddingBlockStart="base">
                   <s-text type="strong">
