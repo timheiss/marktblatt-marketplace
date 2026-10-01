@@ -1841,131 +1841,167 @@ const metaDescription =
   : []),
 
 /*
+ * =========================================================
+ * ANBIETER-LINKS
+ * =========================================================
+ *
+ * Shopify-Metafelder vom Typ "link" erwarten einen
+ * JSON-Wert aus URL und Beschriftung.
+ */
+
+
+/*
  * Link zur Homepage
  */
+
 ...(vendorProfile?.homepageUrl
   ? [
       {
         namespace: "custom",
         key: "link_zur_homepage",
         type: "link",
+
         value: JSON.stringify({
           url: String(
             vendorProfile.homepageUrl
           ),
+          label: "Homepage",
         }),
       },
     ]
   : []),
 
+
 /*
  * Link zum Impressum
  */
+
 ...(vendorProfile?.imprintUrl
   ? [
       {
         namespace: "custom",
         key: "link_zum_impressum",
         type: "link",
+
         value: JSON.stringify({
           url: String(
             vendorProfile.imprintUrl
           ),
+          label: "Impressum",
         }),
       },
     ]
   : []),
 
+
 /*
  * Widerruf / Rückgabe
  */
+
 ...(vendorProfile?.withdrawalUrl
   ? [
       {
         namespace: "custom",
         key: "info_zu_widerruf_ruckgabe",
         type: "link",
+
         value: JSON.stringify({
           url: String(
             vendorProfile.withdrawalUrl
           ),
+          label: "Widerruf / Rückgabe",
         }),
       },
     ]
   : []),
 
+
 /*
  * Facebook
  */
+
 ...(vendorProfile?.facebookUrl
   ? [
       {
         namespace: "custom",
         key: "facebook",
         type: "link",
+
         value: JSON.stringify({
           url: String(
             vendorProfile.facebookUrl
           ),
+          label: "Facebook",
         }),
       },
     ]
   : []),
 
+
 /*
  * Instagram
  */
+
 ...(vendorProfile?.instagramUrl
   ? [
       {
         namespace: "custom",
         key: "instagram_link",
         type: "link",
+
         value: JSON.stringify({
           url: String(
             vendorProfile.instagramUrl
           ),
+          label: "Instagram",
         }),
       },
     ]
   : []),
 
+
 /*
  * TikTok
  */
+
 ...(vendorProfile?.tiktokUrl
   ? [
       {
         namespace: "custom",
         key: "tiktok_link",
         type: "link",
+
         value: JSON.stringify({
           url: String(
             vendorProfile.tiktokUrl
           ),
+          label: "TikTok",
         }),
       },
     ]
   : []),
 
+
 /*
  * YouTube
  */
+
 ...(vendorProfile?.youtubeUrl
   ? [
       {
         namespace: "custom",
         key: "youtube_link",
         type: "link",
+
         value: JSON.stringify({
           url: String(
             vendorProfile.youtubeUrl
           ),
+          label: "YouTube",
         }),
       },
     ]
   : []),
-
                 {
                   namespace:
                     "marktblatt",
