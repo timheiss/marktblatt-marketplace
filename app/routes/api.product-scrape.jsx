@@ -1027,6 +1027,260 @@ function getCompareAtPrice(
  * =========================================================
  */
 
+/*
+ * =========================================================
+ * ANBIETER-LINKS AUS PRODUKTSEITE ERMITTELN
+ * =========================================================
+ *
+ * Sucht auf der bereits geladenen Produktseite nach:
+ *
+ * - Homepage
+ * - Impressum
+ * - Widerruf / Rückgabe
+ * - Facebook
+ * - Instagram
+ * - TikTok
+ * - YouTube
+ *
+ * Es werden hier keine zusätzlichen Seiten geladen.
+ * Relative Links werden in absolute URLs umgewandelt.
+ */
+
+function extractVendorLinks(
+  html,
+  pageUrl
+) {
+  const $ = cheerio.load(html);
+
+  let homepageUrl = null;
+  let imprintUrl = null;
+  let withdrawalUrl = null;
+
+  let facebookUrl = null;
+  let instagramUrl = null;
+  let tiktokUrl = null;
+  let youtubeUrl = null;
+
+  let origin = null;
+
+  try {
+    const page =
+      new URL(pageUrl);
+
+    origin =
+      `${page.protocol}//${page.host}`;
+
+    homepageUrl = origin;
+  } catch {
+    // Ungültige Basis-URL ignorieren.
+  }
+
+
+  /*
+   * -------------------------------------------------------
+   * ALLE LINKS DER SEITE DURCHSUCHEN
+   * -------------------------------------------------------
+   */
+
+  $("a[href]").each(
+    (_, element) => {
+      const href =
+        $(element).attr("href");
+
+      if (!href) {
+        return;
+      }
+
+      const url =
+        absoluteUrl(
+          href,
+          pageUrl
+        );
+
+      if (!url) {
+        return;
+      }
+
+      let parsed;
+
+      try {
+        parsed =
+          new URL(url);
+      } catch {
+        return;
+      }
+
+      if (
+        !["http:", "https:"].includes(
+          parsed.protocol
+        )
+      ) {
+        return;
+      }
+
+      const hostname =
+        parsed.hostname
+          .toLowerCase()
+          .replace(/^www\./, "");
+
+      const pathname =
+        decodeURIComponent(
+          parsed.pathname
+        ).toLowerCase();
+
+      const linkText =
+        cleanText(
+          $(element).text()
+        )
+          ?.toLowerCase() ||
+        "";
+
+      const searchable =
+        `${pathname} ${linkText}`;
+
+
+      /*
+       * ---------------------------------------------------
+       * SOCIAL MEDIA
+       * ---------------------------------------------------
+       */
+
+      if (
+        !facebookUrl &&
+        (
+          hostname === "facebook.com" ||
+          hostname.endsWith(
+            ".facebook.com"
+          )
+        )
+      ) {
+        facebookUrl = url;
+      }
+
+      if (
+        !instagramUrl &&
+        (
+          hostname === "instagram.com" ||
+          hostname.endsWith(
+            ".instagram.com"
+          )
+        )
+      ) {
+        instagramUrl = url;
+      }
+
+      if (
+        !tiktokUrl &&
+        (
+          hostname === "tiktok.com" ||
+          hostname.endsWith(
+            ".tiktok.com"
+          )
+        )
+      ) {
+        tiktokUrl = url;
+      }
+
+      if (
+        !youtubeUrl &&
+        (
+          hostname === "youtube.com" ||
+          hostname.endsWith(
+            ".youtube.com"
+          ) ||
+          hostname === "youtu.be"
+        )
+      ) {
+        youtubeUrl = url;
+      }
+
+
+      /*
+       * ---------------------------------------------------
+       * IMPRESSUM
+       * ---------------------------------------------------
+       */
+
+      if (
+        !imprintUrl &&
+        (
+          searchable.includes(
+            "impressum"
+          ) ||
+          searchable.includes(
+            "imprint"
+          ) ||
+          searchable.includes(
+            "legal-notice"
+          ) ||
+          searchable.includes(
+            "legal_notice"
+          )
+        )
+      ) {
+        imprintUrl = url;
+      }
+
+
+      /*
+       * ---------------------------------------------------
+       * WIDERRUF / RÜCKGABE
+       * ---------------------------------------------------
+       */
+
+      if (
+        !withdrawalUrl &&
+        (
+          searchable.includes(
+            "widerruf"
+          ) ||
+          searchable.includes(
+            "widerrufsrecht"
+          ) ||
+          searchable.includes(
+            "widerrufsbelehrung"
+          ) ||
+          searchable.includes(
+            "rueckgabe"
+          ) ||
+          searchable.includes(
+            "rückgabe"
+          ) ||
+          searchable.includes(
+            "retoure"
+          ) ||
+          searchable.includes(
+            "returns"
+          ) ||
+          searchable.includes(
+            "return-policy"
+          ) ||
+          searchable.includes(
+            "refund"
+          ) ||
+          searchable.includes(
+            "refund-policy"
+          )
+        )
+      ) {
+        withdrawalUrl = url;
+      }
+    }
+  );
+
+
+  return {
+    homepageUrl,
+    imprintUrl,
+    withdrawalUrl,
+
+    facebookUrl,
+    instagramUrl,
+    tiktokUrl,
+    youtubeUrl,
+  };
+}
+
 async function downloadHtml(startUrl) {
   let currentUrl =
     await validatePublicUrl(startUrl);
@@ -1968,6 +2222,31 @@ const corsHeaders = {
         html,
         finalUrl
       );
+
+/*
+ * =========================================================
+ * ANBIETERINFORMATIONEN ERMITTELN
+ * =========================================================
+ */
+
+const vendorLinks =
+  extractVendorLinks(
+    html,
+    finalUrl
+  );
+
+product.vendorLinks =
+  vendorLinks;
+
+console.log(
+  "SCRAPER VENDOR LINKS:",
+  {
+    sourceUrl:
+      product.sourceUrl,
+
+    ...vendorLinks,
+  }
+);
 
 /*
  * =========================================================
