@@ -366,6 +366,53 @@ export const action = async ({ request }) => {
         100
       );
 
+/*
+ * =========================================================
+ * LINKS / SOCIAL MEDIA
+ * =========================================================
+ */
+
+const homepageUrl =
+  optionalText(
+    profile.homepageUrl,
+    2000
+  );
+
+const imprintUrl =
+  optionalText(
+    profile.imprintUrl,
+    2000
+  );
+
+const withdrawalUrl =
+  optionalText(
+    profile.withdrawalUrl,
+    2000
+  );
+
+const facebookUrl =
+  optionalText(
+    profile.facebookUrl,
+    2000
+  );
+
+const instagramUrl =
+  optionalText(
+    profile.instagramUrl,
+    2000
+  );
+
+const tiktokUrl =
+  optionalText(
+    profile.tiktokUrl,
+    2000
+  );
+
+const youtubeUrl =
+  optionalText(
+    profile.youtubeUrl,
+    2000
+  );
 
     /*
      * =====================================================
@@ -401,27 +448,45 @@ export const action = async ({ request }) => {
      * =====================================================
      */
 
-    const savedProfile =
-      await db.vendorProfile.upsert({
-        where: {
-          customerId,
-        },
+const savedProfile =
+  await db.vendorProfile.upsert({
+    where: {
+      customerId,
+    },
 
-        create: {
-          customerId,
-          companyDescription,
-          discountCode,
-          discountPercent,
-          discountMinimumOrderValue,
-        },
+    create: {
+      customerId,
+      companyDescription,
+      discountCode,
+      discountPercent,
+      discountMinimumOrderValue,
 
-        update: {
-          companyDescription,
-          discountCode,
-          discountPercent,
-          discountMinimumOrderValue,
-        },
-      });
+      homepageUrl,
+      imprintUrl,
+      withdrawalUrl,
+
+      facebookUrl,
+      instagramUrl,
+      tiktokUrl,
+      youtubeUrl,
+    },
+
+    update: {
+      companyDescription,
+      discountCode,
+      discountPercent,
+      discountMinimumOrderValue,
+
+      homepageUrl,
+      imprintUrl,
+      withdrawalUrl,
+
+      facebookUrl,
+      instagramUrl,
+      tiktokUrl,
+      youtubeUrl,
+    },
+  });
 
 
     return cors(
