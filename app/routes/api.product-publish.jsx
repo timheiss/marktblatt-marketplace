@@ -1770,6 +1770,202 @@ const metaDescription =
     ]
   : []),
 
+/*
+ * =========================================================
+ * ANBIETERINFORMATIONEN
+ * =========================================================
+ */
+
+/*
+ * Informationen über den Anbieter
+ */
+...(vendorProfile?.companyDescription
+  ? [
+      {
+        namespace: "custom",
+        key: "informationen_uber_anbieter",
+        type: "multi_line_text_field",
+        value: String(
+          vendorProfile.companyDescription
+        ),
+      },
+    ]
+  : []),
+
+/*
+ * Rabattcode
+ */
+...(vendorProfile?.discountCode
+  ? [
+      {
+        namespace: "custom",
+        key: "rabattcode",
+        type: "single_line_text_field",
+        value: String(
+          vendorProfile.discountCode
+        ),
+      },
+    ]
+  : []),
+
+/*
+ * Rabatt in %
+ */
+...(vendorProfile?.discountPercent != null
+  ? [
+      {
+        namespace: "custom",
+        key: "rabatt_in",
+        type: "number_integer",
+        value: String(
+          vendorProfile.discountPercent
+        ),
+      },
+    ]
+  : []),
+
+/*
+ * Mindestbestellwert Rabattcode
+ */
+...(vendorProfile?.discountMinimumOrderValue
+  ? [
+      {
+        namespace: "custom",
+        key: "mindestbestellwert_rabattcode",
+        type: "single_line_text_field",
+        value: String(
+          vendorProfile.discountMinimumOrderValue
+        ),
+      },
+    ]
+  : []),
+
+/*
+ * Link zur Homepage
+ */
+...(vendorProfile?.homepageUrl
+  ? [
+      {
+        namespace: "custom",
+        key: "link_zur_homepage",
+        type: "link",
+        value: JSON.stringify({
+          url: String(
+            vendorProfile.homepageUrl
+          ),
+        }),
+      },
+    ]
+  : []),
+
+/*
+ * Link zum Impressum
+ */
+...(vendorProfile?.imprintUrl
+  ? [
+      {
+        namespace: "custom",
+        key: "link_zum_impressum",
+        type: "link",
+        value: JSON.stringify({
+          url: String(
+            vendorProfile.imprintUrl
+          ),
+        }),
+      },
+    ]
+  : []),
+
+/*
+ * Widerruf / Rückgabe
+ */
+...(vendorProfile?.withdrawalUrl
+  ? [
+      {
+        namespace: "custom",
+        key: "info_zu_widerruf_ruckgabe",
+        type: "link",
+        value: JSON.stringify({
+          url: String(
+            vendorProfile.withdrawalUrl
+          ),
+        }),
+      },
+    ]
+  : []),
+
+/*
+ * Facebook
+ */
+...(vendorProfile?.facebookUrl
+  ? [
+      {
+        namespace: "custom",
+        key: "facebook",
+        type: "link",
+        value: JSON.stringify({
+          url: String(
+            vendorProfile.facebookUrl
+          ),
+        }),
+      },
+    ]
+  : []),
+
+/*
+ * Instagram
+ */
+...(vendorProfile?.instagramUrl
+  ? [
+      {
+        namespace: "custom",
+        key: "instagram_link",
+        type: "link",
+        value: JSON.stringify({
+          url: String(
+            vendorProfile.instagramUrl
+          ),
+        }),
+      },
+    ]
+  : []),
+
+/*
+ * TikTok
+ */
+...(vendorProfile?.tiktokUrl
+  ? [
+      {
+        namespace: "custom",
+        key: "tiktok_link",
+        type: "link",
+        value: JSON.stringify({
+          url: String(
+            vendorProfile.tiktokUrl
+          ),
+        }),
+      },
+    ]
+  : []),
+
+/*
+ * YouTube
+ */
+...(vendorProfile?.youtubeUrl
+  ? [
+      {
+        namespace: "custom",
+        key: "youtube_link",
+        type: "link",
+        value: JSON.stringify({
+          url: String(
+            vendorProfile.youtubeUrl
+          ),
+        }),
+      },
+    ]
+  : []),
+
                 {
                   namespace:
                     "marktblatt",
