@@ -2002,6 +2002,46 @@ const metaDescription =
       },
     ]
   : []),
+
+/*
+ * =========================================================
+ * PRODUKT-LINK / LIEFERZEIT
+ * =========================================================
+ */
+
+/*
+ * Original-Produktseite beim Anbieter
+ *
+ * Shopify-Metafeld:
+ * custom.external_url
+ * Typ: URL
+ */
+{
+  namespace: "custom",
+  key: "external_url",
+  type: "url",
+  value: sourceUrl,
+},
+
+/*
+ * Allgemeine Lieferzeit des Anbieters
+ *
+ * Shopify-Metafeld:
+ * custom.info_zur_lieferzeit
+ * Typ: Mehrzeiliger Text
+ */
+...(vendorProfile?.deliveryTimeInfo
+  ? [
+      {
+        namespace: "custom",
+        key: "info_zur_lieferzeit",
+        type: "multi_line_text_field",
+        value: String(
+          vendorProfile.deliveryTimeInfo
+        ),
+      },
+    ]
+  : []),
                 {
                   namespace:
                     "marktblatt",

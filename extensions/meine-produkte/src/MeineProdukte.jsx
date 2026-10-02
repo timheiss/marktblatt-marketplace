@@ -105,8 +105,9 @@ const [bulkStatusAction, setBulkStatusAction] =
       backgroundImageId: null,
       discountCode: '',
       discountPercent: '',
-      discountMinimumOrderValue: '',
-      homepageUrl: '',
+discountMinimumOrderValue: '',
+deliveryTimeInfo: '',
+homepageUrl: '',
       imprintUrl: '',
       withdrawalUrl: '',
       facebookUrl: '',
@@ -196,11 +197,14 @@ const [bulkStatusAction, setBulkStatusAction] =
         discountPercent:
           profile.discountPercent ?? '',
 
-        discountMinimumOrderValue:
-          profile.discountMinimumOrderValue || '',
+discountMinimumOrderValue:
+  profile.discountMinimumOrderValue || '',
 
-        homepageUrl:
-          profile.homepageUrl || '',
+deliveryTimeInfo:
+  profile.deliveryTimeInfo || '',
+
+homepageUrl:
+  profile.homepageUrl || '',
 
         imprintUrl:
           profile.imprintUrl || '',
@@ -1009,14 +1013,34 @@ async function changeAllProductStatuses(status) {
    * =======================================================
    */
 
-  async function saveVendorProfile() {
-    try {
-      setSavingVendorProfile(true);
-      setError(null);
-      setSaveMessage(null);
+async function saveVendorProfile() {
+  try {
+    setError(null);
+    setSaveMessage(null);
 
-      const token =
-        await shopify.sessionToken.get();
+    /*
+     * =====================================================
+     * LIEFERZEIT IST PFLICHT
+     * =====================================================
+     */
+
+    if (
+      !vendorProfile.deliveryTimeInfo ||
+      !String(
+        vendorProfile.deliveryTimeInfo
+      ).trim()
+    ) {
+      setError(
+        'Bitte wählen Sie eine Lieferzeit aus.'
+      );
+
+      return;
+    }
+
+    setSavingVendorProfile(true);
+
+    const token =
+      await shopify.sessionToken.get();
 
       const response = await fetch(
         `${API_BASE_URL}/api/vendor-profile`,
@@ -1041,6 +1065,9 @@ async function changeAllProductStatuses(status) {
 
               discountMinimumOrderValue:
                 vendorProfile.discountMinimumOrderValue,
+
+deliveryTimeInfo:
+  vendorProfile.deliveryTimeInfo,
             },
           }),
         }
@@ -1074,11 +1101,14 @@ async function changeAllProductStatuses(status) {
         discountPercent:
           profile.discountPercent ?? '',
 
-        discountMinimumOrderValue:
-          profile.discountMinimumOrderValue || '',
+discountMinimumOrderValue:
+  profile.discountMinimumOrderValue || '',
 
-        homepageUrl:
-          profile.homepageUrl || '',
+deliveryTimeInfo:
+  profile.deliveryTimeInfo || '',
+
+homepageUrl:
+  profile.homepageUrl || '',
 
         imprintUrl:
           profile.imprintUrl || '',
@@ -1446,6 +1476,57 @@ async function changeAllProductStatuses(status) {
                   Mindestbestellwert, lassen Sie das Feld
                   leer.
                 </s-text>
+
+<s-select
+  label="Lieferzeit"
+  value={vendorProfile.deliveryTimeInfo}
+  onChange={(event) => {
+    setVendorProfile(
+      (current) => ({
+        ...current,
+        deliveryTimeInfo:
+          event.currentTarget.value,
+      })
+    );
+  }}
+>
+  <s-option value="">
+    Bitte auswählen
+  </s-option>
+
+  <s-option value="1–2 Werktage">
+    1–2 Werktage
+  </s-option>
+
+  <s-option value="2–3 Werktage">
+    2–3 Werktage
+  </s-option>
+
+  <s-option value="3–5 Werktage">
+    3–5 Werktage
+  </s-option>
+
+  <s-option value="5–7 Werktage">
+    5–7 Werktage
+  </s-option>
+
+  <s-option value="1–2 Wochen">
+    1–2 Wochen
+  </s-option>
+
+  <s-option value="2–4 Wochen">
+    2–4 Wochen
+  </s-option>
+
+  <s-option value="Auf Anfrage">
+    Auf Anfrage
+  </s-option>
+</s-select>
+
+<s-text>
+  Wählen Sie die allgemeine Lieferzeit für Ihre Produkte.
+  Diese Angabe gilt für alle Ihre Produkte auf Marktblatt.
+</s-text>
 
                 <s-button
                   variant="primary"

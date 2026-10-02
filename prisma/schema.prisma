@@ -111,6 +111,10 @@ model VendorProfile {
   // Produkt-Metafelddefinition.
   discountMinimumOrderValue String?
 
+// Allgemeine Lieferzeit des Anbieters.
+// Gilt für alle Produkte dieses Anbieters.
+deliveryTimeInfo String?
+
   /**
    * Automatisch ermittelbare Anbieterinformationen
    */

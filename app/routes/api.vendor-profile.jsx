@@ -94,6 +94,9 @@ function formatProfile(profile) {
     discountMinimumOrderValue:
       profile?.discountMinimumOrderValue ?? "",
 
+deliveryTimeInfo:
+  profile?.deliveryTimeInfo ?? "",
+
     homepageUrl:
       profile?.homepageUrl ?? "",
 
@@ -367,6 +370,20 @@ export const action = async ({ request }) => {
       );
 
 /*
+ * =====================================================
+ * LIEFERZEIT
+ * =====================================================
+ *
+ * Diese Angabe gilt für alle Produkte des Anbieters.
+ */
+
+const deliveryTimeInfo =
+  optionalText(
+    profile.deliveryTimeInfo,
+    500
+  );
+
+/*
  * =========================================================
  * LINKS / SOCIAL MEDIA
  * =========================================================
@@ -454,14 +471,15 @@ const savedProfile =
       customerId,
     },
 
-    create: {
-      customerId,
-      companyDescription,
-      discountCode,
-      discountPercent,
-      discountMinimumOrderValue,
+create: {
+  customerId,
+  companyDescription,
+  discountCode,
+  discountPercent,
+  discountMinimumOrderValue,
+  deliveryTimeInfo,
 
-      homepageUrl,
+  homepageUrl,
       imprintUrl,
       withdrawalUrl,
 
@@ -471,13 +489,14 @@ const savedProfile =
       youtubeUrl,
     },
 
-    update: {
-      companyDescription,
-      discountCode,
-      discountPercent,
-      discountMinimumOrderValue,
+update: {
+  companyDescription,
+  discountCode,
+  discountPercent,
+  discountMinimumOrderValue,
+  deliveryTimeInfo,
 
-      homepageUrl,
+  homepageUrl,
       imprintUrl,
       withdrawalUrl,
 
