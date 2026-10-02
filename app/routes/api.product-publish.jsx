@@ -2618,7 +2618,7 @@ variants: [
         success: true,
 
 message:
-  "Produkt wurde erfolgreich an Marktblatt übertragen.",
+  "Produkt wurde an Marktblatt übertragen und aktiviert.",
 
         product: {
           id:

@@ -759,7 +759,7 @@ status: "draft",
         success: true,
 
         message:
-          "Produkt wurde erfolgreich in Marktblatt übernommen.",
+          "Produkt wurde in Marktblatt übernommen.",
 
         product: {
           id:
