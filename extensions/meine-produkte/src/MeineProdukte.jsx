@@ -283,23 +283,31 @@ homepageUrl:
       );
 
       if (data.package) {
-        setPackageData({
-          name:
-            data.package.name ||
-            'Business',
+setPackageData({
+  name:
+    data.package.name ||
+    'Business',
 
-          productLimit:
-            data.package.productLimit ??
-            100,
+  productLimit:
+    data.package.productLimit ??
+    100,
 
-          usedProducts:
-            data.package.usedProducts ??
-            0,
+  usedProducts:
+    data.package.usedProducts ??
+    0,
 
-compareAtPricesEnabled:
-  data.package.compareAtPricesEnabled ??
-  true,
-        });
+  availableProducts:
+    data.package.availableProducts ??
+    Math.max(
+      (data.package.productLimit ?? 100) -
+      (data.package.usedProducts ?? 0),
+      0
+    ),
+
+  compareAtPricesEnabled:
+    data.package.compareAtPricesEnabled ??
+    true,
+});
       }
 
     } catch (err) {
@@ -683,23 +691,62 @@ async function changeAllProductStatuses(status) {
       return;
     }
 
-    /*
-     * Produkte überspringen, die bereits den
-     * gewünschten Status besitzen.
-     */
-    const productsToChange =
-      publishedProducts.filter(
-        (product) => product.status !== status
-      );
+/*
+ * Produkte überspringen, die bereits den
+ * gewünschten Status besitzen.
+ *
+ * Beim Aktivieren zusätzlich alle Produkte
+ * überspringen, die durch Marktblatt gesperrt wurden.
+ */
+const productsToChange =
+  publishedProducts.filter(
+    (product) =>
+      product.status !== status &&
+      !(
+        status === 'active' &&
+        product.adminLocked
+      )
+  );
 
-    if (productsToChange.length === 0) {
-      setSaveMessage(
-        status === 'active'
-          ? 'Alle übertragenen Produkte sind bereits aktiviert.'
-          : 'Alle übertragenen Produkte sind bereits deaktiviert.'
-      );
-      return;
-    }
+/*
+ * Anzahl der durch Marktblatt gesperrten Produkte,
+ * die bei "Alle aktivieren" übersprungen werden.
+ */
+const adminLockedProducts =
+  status === 'active'
+    ? publishedProducts.filter(
+        (product) =>
+          product.status !== 'active' &&
+          product.adminLocked
+      )
+    : [];
+
+if (productsToChange.length === 0) {
+  if (
+    status === 'active' &&
+    adminLockedProducts.length > 0
+  ) {
+    setSaveMessage(
+      `${adminLockedProducts.length} ${
+        adminLockedProducts.length === 1
+          ? 'Produkt wurde'
+          : 'Produkte wurden'
+      } durch Marktblatt deaktiviert und ${
+        adminLockedProducts.length === 1
+          ? 'kann'
+          : 'können'
+      } nur durch Marktblatt wieder aktiviert werden.`
+    );
+  } else {
+    setSaveMessage(
+      status === 'active'
+        ? 'Alle übertragenen Produkte sind bereits aktiviert.'
+        : 'Alle übertragenen Produkte sind bereits deaktiviert.'
+    );
+  }
+
+  return;
+}
 
     const token =
       await shopify.sessionToken.get();
@@ -740,11 +787,36 @@ async function changeAllProductStatuses(status) {
 
     await loadProducts();
 
-    setSaveMessage(
-      status === 'active'
-        ? `${productsToChange.length} Produkte wurden aktiviert.`
-        : `${productsToChange.length} Produkte wurden deaktiviert.`
-    );
+if (
+  status === 'active' &&
+  adminLockedProducts.length > 0
+) {
+  setSaveMessage(
+    `${productsToChange.length} ${
+      productsToChange.length === 1
+        ? 'Produkt wurde'
+        : 'Produkte wurden'
+    } aktiviert. ${adminLockedProducts.length} ${
+      adminLockedProducts.length === 1
+        ? 'Produkt wurde'
+        : 'Produkte wurden'
+    } übersprungen, da ${
+      adminLockedProducts.length === 1
+        ? 'es'
+        : 'sie'
+    } durch Marktblatt deaktiviert ${
+      adminLockedProducts.length === 1
+        ? 'wurde'
+        : 'wurden'
+    }.`
+  );
+} else {
+  setSaveMessage(
+    status === 'active'
+      ? `${productsToChange.length} Produkte wurden aktiviert.`
+      : `${productsToChange.length} Produkte wurden deaktiviert.`
+  );
+}
 
   } catch (err) {
     console.error(
@@ -769,17 +841,32 @@ async function changeAllProductStatuses(status) {
   }
 }
 
-  async function toggleProductStatus(product) {
-    if (!product?.id) {
-      return;
-    }
+async function toggleProductStatus(product) {
+  if (!product?.id) {
+    return;
+  }
 
-    const newStatus =
-      product.status === 'active'
-        ? 'inactive'
-        : 'active';
+  const newStatus =
+    product.status === 'active'
+      ? 'inactive'
+      : 'active';
 
-    try {
+  /*
+   * Durch Marktblatt gesperrte Produkte dürfen
+   * vom Anbieter nicht wieder aktiviert werden.
+   */
+  if (
+    newStatus === 'active' &&
+    product.adminLocked
+  ) {
+    setError(
+      'Dieses Produkt kann nur durch Marktblatt wieder aktiviert werden. Bitte Support kontaktieren.'
+    );
+
+    return;
+  }
+
+  try {
       setChangingStatusId(
         product.id
       );
@@ -1187,10 +1274,16 @@ homepageUrl:
       Produkten verwendet
     </s-text>
 
-    <s-text>
-      {packageData.availableProducts}{' '}
-      Produkte verfügbar
-    </s-text>
+<s-banner
+  tone={
+    packageData.availableProducts > 0
+      ? 'success'
+      : 'critical'
+  }
+>
+  {packageData.availableProducts}{' '}
+  Produkte verfügbar
+</s-banner>
 
 
 <s-box paddingBlockStart="base">
@@ -1891,28 +1984,52 @@ homepageUrl:
                                   gap="small"
                                 >
 
-
-
 {alreadyPublished && (
-  <s-button
-    onClick={() =>
-      toggleProductStatus(
-        product
-      )
-    }
-    disabled={
-      statusChanging ||
-      productDeleting ||
-      productPublishing
-    }
-  >
-    {statusChanging
-      ? 'Status wird gespeichert...'
-      : product.status ===
-          'active'
-        ? 'Deaktivieren'
-        : 'Aktivieren'}
-  </s-button>
+  <>
+    {product.adminLocked &&
+      product.status !== 'active' && (
+        <s-stack
+          direction="block"
+          gap="small"
+        >
+          <s-text tone="critical">
+            <strong>
+              Durch Marktblatt deaktiviert
+            </strong>
+          </s-text>
+
+          <s-text tone="critical">
+            Dieses Produkt kann nur durch Marktblatt wieder aktiviert werden. Bitte Support kontaktieren.
+          </s-text>
+        </s-stack>
+      )}
+
+    <s-button
+      onClick={() =>
+        toggleProductStatus(
+          product
+        )
+      }
+      disabled={
+        statusChanging ||
+        productDeleting ||
+        productPublishing ||
+        (
+          product.adminLocked &&
+          product.status !== 'active'
+        )
+      }
+    >
+      {statusChanging
+        ? 'Status wird gespeichert...'
+        : product.status ===
+            'active'
+          ? 'Deaktivieren'
+          : product.adminLocked
+            ? 'Durch Marktblatt deaktiviert'
+            : 'Aktivieren'}
+    </s-button>
+  </>
 )}
 
                                   {!alreadyPublished && (

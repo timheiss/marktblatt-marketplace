@@ -245,6 +245,28 @@ model MarketplaceProduct {
   status String @default("active")
 
   /**
+   * Marktblatt-Admin-Sperre
+   *
+   * false:
+   * Anbieter darf das Produkt selbst aktivieren/deaktivieren.
+   *
+   * true:
+   * Produkt wurde durch Marktblatt gesperrt und kann
+   * vom Anbieter nicht wieder aktiviert werden.
+   */
+  adminLocked Boolean @default(false)
+
+/**
+ * Kennzeichnet eine Statusänderung, die gerade
+ * durch die Anbieter-App ausgelöst wurde.
+ *
+ * Dadurch kann der Shopify-Webhook unterscheiden:
+ * Anbieter hat deaktiviert -> keine Admin-Sperre
+ * Shopify-Admin hat deaktiviert -> Admin-Sperre
+ */
+vendorStatusChangePending Boolean @default(false)
+
+  /**
    * =======================================================
    * SHOPIFY VERKNÜPFUNG
    * =======================================================

@@ -171,7 +171,7 @@ export const loader = async ({ request }) => {
             product.brand,
 
           /*
-           * Zusätzliche Produktdaten
+           * ZusÃ¤tzliche Produktdaten
            */
 
           sku:
@@ -245,11 +245,14 @@ export const loader = async ({ request }) => {
           image:
             images[0] || null,
 
-          status:
-            product.status,
+status:
+  product.status,
 
-          shopifyProductId:
-            product.shopifyProductId,
+adminLocked:
+  product.adminLocked ?? false,
+
+shopifyProductId:
+  product.shopifyProductId,
 
           shopifyVariantId:
             product.shopifyVariantId,

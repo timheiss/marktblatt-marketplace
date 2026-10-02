@@ -4,6 +4,28 @@ import {
   unauthenticated,
 } from "../shopify.server";
 
+/*
+ * =========================================================
+ * VERTRIEBSKANÄLE
+ * =========================================================
+ *
+ * Neue Marktblatt-Produkte werden automatisch auf diesen
+ * Vertriebskanälen veröffentlicht, sofern die jeweilige
+ * Publication im echten Marktblatt-Shop vorhanden ist.
+ */
+
+const TARGET_PUBLICATIONS = [
+  "onlineshop",
+  "online store",
+  "google & youtube",
+  "facebook & instagram",
+];
+
+function normalizePublicationName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
 
 /*
  * =========================================================
@@ -1735,12 +1757,15 @@ const metaDescription =
     : {}
 ),
 
-              /*
-               * Anbieterprodukte zunÃƒÂ¤chst immer
-               * als Entwurf anlegen.
-               */
-              status:
-                "DRAFT",
+/*
+ * Anbieterprodukte werden beim Übertragen direkt
+ * als aktives Shopify-Produkt angelegt.
+ *
+ * Die Veröffentlichung auf den gewünschten
+ * Vertriebskanälen erfolgt anschließend separat.
+ */
+status:
+  "ACTIVE",
 
               metafields: [
 ...shopifyTaxonomyMetafields,
@@ -2339,12 +2364,206 @@ variants: [
         price;
     }
 
+    /*
+     * =====================================================
+     * 12. VERTRIEBSKANÄLE LADEN
+     * =====================================================
+     *
+     * Das neu übertragene Produkt wird automatisch auf den
+     * gewünschten Marktblatt-Vertriebskanälen veröffentlicht.
+     *
+     * Point of Sale und Shop werden ausdrücklich NICHT
+     * automatisch verwendet.
+     */
+
+    const publicationsResponse =
+      await admin.graphql(
+        `#graphql
+          query MarktblattPublications {
+            publications(first: 100) {
+              nodes {
+                id
+                name
+              }
+            }
+          }
+        `
+      );
+
+    const publicationsData =
+      await publicationsResponse.json();
+
+    if (
+      publicationsData?.errors?.length
+    ) {
+      throw new Error(
+        publicationsData.errors
+          .map(
+            (error) =>
+              error.message
+          )
+          .join(" ")
+      );
+    }
+
+    const publications =
+      publicationsData?.data
+        ?.publications
+        ?.nodes ?? [];
+
+    /*
+     * Nur die gewünschten Vertriebskanäle auswählen.
+     */
+
+    const targetPublications =
+      publications.filter(
+        (publication) =>
+          TARGET_PUBLICATIONS.includes(
+            normalizePublicationName(
+              publication.name
+            )
+          )
+      );
+
+    const publishedChannels =
+      targetPublications.map(
+        (publication) =>
+          publication.name
+      );
+
+    /*
+     * Prüfen, welche gewünschten Vertriebskanäle
+     * im echten Marktblatt-Shop fehlen.
+     */
+
+    const foundNames =
+      new Set(
+        targetPublications.map(
+          (publication) =>
+            normalizePublicationName(
+              publication.name
+            )
+        )
+      );
+
+    const desiredChannelGroups = [
+      {
+        label: "Onlineshop",
+        aliases: [
+          "onlineshop",
+          "online store",
+        ],
+      },
+      {
+        label: "Google & YouTube",
+        aliases: [
+          "google & youtube",
+        ],
+      },
+      {
+        label:
+          "Facebook & Instagram",
+        aliases: [
+          "facebook & instagram",
+        ],
+      },
+    ];
+
+    const missingChannels =
+      desiredChannelGroups
+        .filter(
+          (group) =>
+            !group.aliases.some(
+              (alias) =>
+                foundNames.has(alias)
+            )
+        )
+        .map(
+          (group) =>
+            group.label
+        );
 
     /*
      * =====================================================
-     * 12. SHOPIFY-ZUORDNUNG IN POSTGRESQL SPEICHERN
+     * 13. PRODUKT AUF VERTRIEBSKANÄLEN VERÖFFENTLICHEN
      * =====================================================
      */
+
+    if (
+      targetPublications.length > 0
+    ) {
+      const publicationInputs =
+        targetPublications.map(
+          (publication) => ({
+            publicationId:
+              publication.id,
+          })
+        );
+
+      const publishResponse =
+        await admin.graphql(
+          `#graphql
+            mutation PublishProduct(
+              $id: ID!
+              $input: [PublicationInput!]!
+            ) {
+              publishablePublish(
+                id: $id
+                input: $input
+              ) {
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }
+          `,
+          {
+            variables: {
+              id:
+                shopifyProductId,
+
+              input:
+                publicationInputs,
+            },
+          }
+        );
+
+      const publishData =
+        await publishResponse.json();
+
+      if (
+        publishData?.errors?.length
+      ) {
+        throw new Error(
+          publishData.errors
+            .map(
+              (error) =>
+                error.message
+            )
+            .join(" ")
+        );
+      }
+
+      const publishErrors =
+        publishData?.data
+          ?.publishablePublish
+          ?.userErrors ?? [];
+
+      if (
+        publishErrors.length > 0
+      ) {
+        throw new Error(
+          publishErrors
+            .map(
+              (error) =>
+                error.message
+            )
+            .join(" ")
+        );
+      }
+    }
+
 
     const updatedProduct =
       await db.marketplaceProduct.update({
@@ -2354,6 +2573,10 @@ variants: [
         },
 
         data: {
+          /*
+           * Shopify-Zuordnung
+           */
+
           shopifyProductId,
 
           shopifyVariantId:
@@ -2363,13 +2586,30 @@ variants: [
           shopifyHandle:
             createdProduct.handle ||
             null,
+
+          /*
+           * Marktblatt-Status
+           *
+           * Das Produkt wurde gerade durch die App
+           * erstellt und veröffentlicht.
+           * Deshalb besteht keine Admin-Sperre.
+           */
+
+          status:
+            "active",
+
+          adminLocked:
+            false,
+
+          vendorStatusChangePending:
+            false,
         },
       });
 
 
     /*
      * =====================================================
-     * 13. ERFOLG
+     * 15. ERFOLG
      * =====================================================
      */
 
@@ -2377,8 +2617,8 @@ variants: [
       Response.json({
         success: true,
 
-        message:
-          "Produkt wurde als Entwurf an Marktblatt übertragen.",
+message:
+  "Produkt wurde erfolgreich an Marktblatt übertragen.",
 
         product: {
           id:

@@ -19,8 +19,12 @@ api_version = "2026-10"
   uri = "/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
 
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/products/update"
+  topics = [ "products/update" ]
+
 [access_scopes]
-scopes = "write_products,write_metaobjects,write_metaobject_definitions,read_orders,read_customers,write_files"
+scopes = "write_products,read_publications,write_publications,write_metaobjects,write_metaobject_definitions,read_orders,read_customers,write_files"
 
 [auth]
 redirect_urls = [
