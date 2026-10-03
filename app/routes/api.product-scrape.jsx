@@ -2217,11 +2217,88 @@ const corsHeaders = {
      * PRODUKT AUSLESEN
      */
 
-    const product =
-      extractProduct(
-        html,
-        finalUrl
-      );
+const product =
+  extractProduct(
+    html,
+    finalUrl
+  );
+
+/*
+ * =========================================================
+ * SEO-DATEN PRÜFEN UND OPTIMIEREN
+ * =========================================================
+ *
+ * Vorhandene Meta-Daten werden von der KI auf Qualität
+ * geprüft.
+ *
+ * Fehlende oder unzureichende SEO-Daten werden aus den
+ * tatsächlichen Produktinformationen verbessert.
+ *
+ * Die SEO-Optimierung besitzt zusätzlich einen lokalen
+ * Fallback und darf den Produktimport niemals verhindern.
+ */
+
+try {
+  const {
+    optimizeProductSeo,
+  } = await import(
+    "../seo-optimization.server"
+  );
+
+  const optimizedSeo =
+    await optimizeProductSeo({
+      title:
+        product.title,
+
+      description:
+        product.description,
+
+      metaTitle:
+        product.metaTitle,
+
+      metaDescription:
+        product.metaDescription,
+    });
+
+  product.metaTitle =
+    optimizedSeo?.metaTitle ||
+    product.metaTitle ||
+    null;
+
+  product.metaDescription =
+    optimizedSeo?.metaDescription ||
+    product.metaDescription ||
+    null;
+
+  console.log(
+    "SCRAPER SEO RESULT:",
+    {
+      metaTitle:
+        product.metaTitle,
+
+      metaDescription:
+        product.metaDescription,
+
+      optimizedByAi:
+        optimizedSeo
+          ?.optimizedByAi ??
+        false,
+    }
+  );
+
+} catch (error) {
+  /*
+   * Zusätzliche Sicherheitsstufe:
+   *
+   * Selbst ein unerwarteter Fehler beim Laden des
+   * SEO-Moduls darf den Produktimport nicht verhindern.
+   */
+
+  console.error(
+    "SCRAPER SEO OPTIMIZATION ERROR:",
+    error
+  );
+}
 
 /*
  * =========================================================
