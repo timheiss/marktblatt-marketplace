@@ -132,103 +132,172 @@ ${JSON.stringify(allowedAttributes)}
 `.trim();
 
 
-  const response =
-    await fetch(
-      "https://api.openai.com/v1/responses",
-      {
-        method: "POST",
+  /*
+   * =========================================================
+   * OPENAI ATTRIBUT-KLASSIFIZIERUNG MIT RETRY
+   * =========================================================
+   *
+   * Ein vorübergehender OpenAI-Fehler darf die weiteren
+   * serverseitigen Fallbacks nicht verhindern.
+   *
+   * Bei einem Fehler wird einmal erneut versucht.
+   */
 
-        headers: {
-          "Content-Type":
-            "application/json",
+  let parsed = {
+    attributes: [],
+  };
 
-          Authorization:
-            `Bearer ${apiKey}`,
-        },
 
-        body: JSON.stringify({
-          model:
-            "gpt-5.6-luna",
+  for (
+    let attempt = 1;
+    attempt <= 2;
+    attempt++
+  ) {
+    try {
+      const response =
+        await fetch(
+          "https://api.openai.com/v1/responses",
+          {
+            method: "POST",
 
-          input,
+            headers: {
+              "Content-Type":
+                "application/json",
 
-          reasoning: {
-            effort: "low",
-          },
+              Authorization:
+                `Bearer ${apiKey}`,
+            },
 
-          text: {
-            verbosity: "low",
-          },
+            body: JSON.stringify({
+              model:
+                "gpt-5.6-luna",
 
-          max_output_tokens:
-            1000,
-        }),
+              input,
+
+              reasoning: {
+                effort: "low",
+              },
+
+              text: {
+                verbosity: "low",
+              },
+
+              max_output_tokens:
+                1000,
+            }),
+          }
+        );
+
+
+      const result =
+        await response.json();
+
+
+      if (!response.ok) {
+        console.error(
+          `OPENAI ATTRIBUTE CLASSIFICATION ERROR - Versuch ${attempt}:`,
+          result
+        );
+
+        /*
+         * Beim ersten Fehler noch einmal versuchen.
+         */
+
+        if (attempt < 2) {
+          continue;
+        }
+
+        /*
+         * Nach dem zweiten Fehler:
+         *
+         * Keine Exception werfen.
+         * Stattdessen mit leerer KI-Auswahl weiterarbeiten,
+         * damit serverseitige Defaults wie "Erwachsene"
+         * trotzdem gesetzt werden können.
+         */
+
+        break;
       }
-    );
 
 
-  const result =
-    await response.json();
+      /*
+       * Antworttext auslesen.
+       */
+
+      const outputText =
+        result?.output
+          ?.flatMap(
+            (item) =>
+              item?.content || []
+          )
+          ?.find(
+            (item) =>
+              item?.type ===
+              "output_text"
+          )
+          ?.text
+          ?.trim() ||
+        null;
 
 
-  if (!response.ok) {
-    console.error(
-      "OPENAI ATTRIBUTE CLASSIFICATION ERROR:",
-      result
-    );
+      if (!outputText) {
+        console.warn(
+          `OPENAI ATTRIBUTE CLASSIFICATION: Keine Ausgabe - Versuch ${attempt}.`
+        );
 
-    throw new Error(
-      result?.error?.message ||
-      "Attributklassifizierung fehlgeschlagen."
-    );
-  }
+        if (attempt < 2) {
+          continue;
+        }
 
-
-  /*
-   * Antworttext auslesen.
-   */
-
-  const outputText =
-    result?.output
-      ?.flatMap(
-        (item) =>
-          item?.content || []
-      )
-      ?.find(
-        (item) =>
-          item?.type ===
-          "output_text"
-      )
-      ?.text
-      ?.trim() ||
-    null;
+        break;
+      }
 
 
-  if (!outputText) {
-    throw new Error(
-      "Die KI hat keine Attribute zurückgegeben."
-    );
-  }
+      /*
+       * JSON parsen.
+       */
 
+      try {
+        parsed =
+          JSON.parse(outputText);
 
-  /*
-   * JSON parsen.
-   */
+        /*
+         * Erfolgreich:
+         * Retry-Schleife beenden.
+         */
 
-  let parsed;
+        break;
 
-  try {
-    parsed =
-      JSON.parse(outputText);
-  } catch {
-    console.error(
-      "OPENAI ATTRIBUTE RAW OUTPUT:",
-      outputText
-    );
+      } catch {
+        console.error(
+          `OPENAI ATTRIBUTE RAW OUTPUT - Versuch ${attempt}:`,
+          outputText
+        );
 
-    throw new Error(
-      "Die KI-Antwort enthält kein gültiges JSON."
-    );
+        if (attempt < 2) {
+          continue;
+        }
+
+        break;
+      }
+
+    } catch (error) {
+      /*
+       * Auch Netzwerkfehler oder sonstige unerwartete
+       * Fehler dürfen den Produktimport nicht verhindern.
+       */
+
+      console.error(
+        `OPENAI ATTRIBUTE REQUEST FAILED - Versuch ${attempt}:`,
+        error
+      );
+
+      if (attempt < 2) {
+        continue;
+      }
+
+      break;
+    }
   }
 
 
