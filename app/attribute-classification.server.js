@@ -306,6 +306,111 @@ validated.push({
   }
 
 
+  /*
+   * =========================================================
+   * STANDARD-ALTERSGRUPPE: ERWACHSENE
+   * =========================================================
+   *
+   * Wenn die KI keine Altersgruppe bestimmen konnte,
+   * verwenden wir automatisch den offiziellen Shopify-Wert
+   * "Adult" / "Erwachsene", sofern dieser für die erkannte
+   * Shopify-Kategorie tatsächlich verfügbar ist.
+   *
+   * Es werden weiterhin ausschließlich Werte und IDs
+   * verwendet, die Shopify zuvor geliefert hat.
+   */
+
+  const normalizedAttributeName =
+    (value) =>
+      String(value || "")
+        .trim()
+        .toLowerCase();
+
+
+  const hasAgeGroup =
+    validated.some(
+      (attribute) => {
+        const name =
+          normalizedAttributeName(
+            attribute.attributeName
+          );
+
+        return (
+          name === "age group" ||
+          name === "age_group" ||
+          name === "altersgruppe"
+        );
+      }
+    );
+
+
+  if (!hasAgeGroup) {
+    const ageGroupAttribute =
+      allowedAttributes.find(
+        (attribute) => {
+          const name =
+            normalizedAttributeName(
+              attribute.name
+            );
+
+          return (
+            name === "age group" ||
+            name === "age_group" ||
+            name === "altersgruppe"
+          );
+        }
+      );
+
+
+    if (ageGroupAttribute) {
+      const adultValue =
+        ageGroupAttribute.values.find(
+          (value) => {
+            const name =
+              normalizedAttributeName(
+                value.name
+              );
+
+            return (
+              name === "adult" ||
+              name === "adults" ||
+              name === "erwachsene" ||
+              name === "erwachsener"
+            );
+          }
+        );
+
+
+      if (adultValue) {
+        validated.push({
+          attributeId:
+            ageGroupAttribute.id,
+
+          attributeName:
+            ageGroupAttribute.name,
+
+          values: [
+            adultValue,
+          ],
+        });
+
+        console.log(
+          "MARKTBLATT DEFAULT AGE GROUP:",
+          {
+            attribute:
+              ageGroupAttribute.name,
+
+            value:
+              adultValue.name,
+
+            id:
+              adultValue.id,
+          }
+        );
+      }
+    }
+  }
+
   console.log(
     "MARKTBLATT AI ATTRIBUTES:",
     {
