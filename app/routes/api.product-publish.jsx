@@ -1208,6 +1208,344 @@ console.log(
 
   return metafields;
 }
+
+/*
+ * =========================================================
+ * GOOGLE-VARIANTENMETAFELDER VORBEREITEN
+ * =========================================================
+ *
+ * Verwendet bevorzugt die bereits von unserer
+ * Taxonomie-KI erkannten Shopify-Attribute.
+ *
+ * Es wird KEINE zweite KI-Abfrage durchgeführt.
+ *
+ * Google-Metafelder:
+ *
+ * mm-google-shopping.age_group
+ * mm-google-shopping.gender
+ * mm-google-shopping.condition
+ * mm-google-shopping.mpn
+ */
+
+function prepareGoogleVariantMetafields(
+  product,
+  taxonomyAttributes
+) {
+  const metafields = [];
+
+  const attributes =
+    Array.isArray(taxonomyAttributes)
+      ? taxonomyAttributes
+      : [];
+
+
+  /*
+   * =======================================================
+   * TAXONOMIEWERT SUCHEN
+   * =======================================================
+   */
+
+  const findAttributeValues = (
+    possibleNames
+  ) => {
+    const normalizedNames =
+      possibleNames.map(
+        (name) =>
+          String(name)
+            .trim()
+            .toLowerCase()
+      );
+
+    const attribute =
+      attributes.find(
+        (item) =>
+          normalizedNames.includes(
+            String(
+              item?.attributeName || ""
+            )
+              .trim()
+              .toLowerCase()
+          )
+      );
+
+    if (
+      !attribute ||
+      !Array.isArray(
+        attribute.values
+      )
+    ) {
+      return [];
+    }
+
+    return attribute.values
+      .map(
+        (value) =>
+          String(
+            value?.name || ""
+          ).trim()
+      )
+      .filter(Boolean);
+  };
+
+
+  /*
+   * =======================================================
+   * AGE GROUP
+   * =======================================================
+   *
+   * Shopify:
+   * Adults
+   * Kids
+   * Toddlers
+   * Infants
+   * Newborns
+   *
+   * Google:
+   * adult
+   * kids
+   * toddler
+   * infant
+   * newborn
+   */
+
+  const taxonomyAgeGroup =
+    findAttributeValues([
+      "Age group",
+      "Age Group",
+      "age_group",
+    ])[0] || null;
+
+  const rawAgeGroup =
+    taxonomyAgeGroup ||
+    (
+      product?.ageGroup
+        ? String(
+            product.ageGroup
+          ).trim()
+        : null
+    );
+
+  if (rawAgeGroup) {
+    const normalized =
+      rawAgeGroup.toLowerCase();
+
+    const ageGroupMap = {
+      adult: "adult",
+      adults: "adult",
+
+      kid: "kids",
+      kids: "kids",
+      child: "kids",
+      children: "kids",
+
+      toddler: "toddler",
+      toddlers: "toddler",
+
+      infant: "infant",
+      infants: "infant",
+
+      newborn: "newborn",
+      newborns: "newborn",
+    };
+
+    const googleAgeGroup =
+      ageGroupMap[normalized];
+
+    if (googleAgeGroup) {
+      metafields.push({
+        namespace:
+          "mm-google-shopping",
+
+        key:
+          "age_group",
+
+        type:
+          "single_line_text_field",
+
+        value:
+          googleAgeGroup,
+      });
+    }
+  }
+
+
+  /*
+   * =======================================================
+   * GENDER
+   * =======================================================
+   *
+   * Bevorzugt Shopify "Target gender".
+   */
+
+  const taxonomyGender =
+    findAttributeValues([
+      "Target gender",
+      "Gender",
+      "Target Gender",
+    ])[0] || null;
+
+  const rawGender =
+    taxonomyGender ||
+    (
+      product?.gender
+        ? String(
+            product.gender
+          ).trim()
+        : null
+    );
+
+  if (rawGender) {
+    const normalized =
+      rawGender.toLowerCase();
+
+    const genderMap = {
+      female: "female",
+      women: "female",
+      woman: "female",
+      damen: "female",
+
+      male: "male",
+      men: "male",
+      man: "male",
+      herren: "male",
+
+      unisex: "unisex",
+    };
+
+    const googleGender =
+      genderMap[normalized];
+
+    if (googleGender) {
+      metafields.push({
+        namespace:
+          "mm-google-shopping",
+
+        key:
+          "gender",
+
+        type:
+          "single_line_text_field",
+
+        value:
+          googleGender,
+      });
+    }
+  }
+
+
+  /*
+   * =======================================================
+   * CONDITION
+   * =======================================================
+   *
+   * Nur einen Zustand übertragen, wenn wir ihn tatsächlich
+   * kennen. Noch KEIN pauschaler "new"-Fallback.
+   */
+
+  const rawCondition =
+    product?.condition
+      ? String(
+          product.condition
+        )
+          .trim()
+          .toLowerCase()
+      : null;
+
+  const conditionMap = {
+    new: "new",
+    neu: "new",
+
+    used: "used",
+    gebraucht: "used",
+
+    refurbished:
+      "refurbished",
+
+    generalüberholt:
+      "refurbished",
+
+    generalueberholt:
+      "refurbished",
+  };
+
+  /*
+   * Standardmäßig gehen Marktblatt-Produkte
+   * von Neuware aus.
+   *
+   * Wurde beim Scrapen / durch die vorhandenen
+   * Produktdaten ein anderer gültiger Zustand erkannt,
+   * hat dieser Vorrang.
+   */
+
+  const googleCondition =
+    (
+      rawCondition &&
+      conditionMap[
+        rawCondition
+      ]
+    )
+      ? conditionMap[
+          rawCondition
+        ]
+      : "new";
+
+
+  metafields.push({
+    namespace:
+      "mm-google-shopping",
+
+    key:
+      "condition",
+
+    type:
+      "single_line_text_field",
+
+    value:
+      googleCondition,
+  });
+
+
+  /*
+   * =======================================================
+   * MPN
+   * =======================================================
+   *
+   * Eine MPN darf niemals erfunden werden.
+   */
+
+  const mpn =
+    product?.mpn
+      ? String(
+          product.mpn
+        ).trim()
+      : null;
+
+  if (mpn) {
+    metafields.push({
+      namespace:
+        "mm-google-shopping",
+
+      key:
+        "mpn",
+
+      type:
+        "single_line_text_field",
+
+      value:
+        mpn,
+    });
+  }
+
+
+  console.log(
+    "GOOGLE VARIANT METAFIELDS PREPARED:",
+    metafields
+  );
+
+
+  return metafields;
+}
+
 /*
  * =========================================================
  * API ACTION
@@ -2362,6 +2700,162 @@ variants: [
           ?.productVariants?.[0]
           ?.price ||
         price;
+    }
+
+    /*
+     * =====================================================
+     * 11B. GOOGLE-VARIANTENMETAFELDER SETZEN
+     * =====================================================
+     *
+     * Die Google-relevanten Daten werden auf der
+     * Shopify-Standardvariante gespeichert.
+     *
+     * Age Group und Gender stammen bevorzugt aus den
+     * bereits erkannten Shopify-Taxonomieattributen.
+     *
+     * Condition verwendet den erkannten Zustand oder
+     * standardmäßig "new".
+     *
+     * MPN wird ausschließlich gesetzt, wenn tatsächlich
+     * eine MPN vorhanden ist.
+     */
+
+    if (firstVariant?.id) {
+      const googleVariantMetafields =
+        prepareGoogleVariantMetafields(
+          product,
+          shopifyTaxonomyAttributes
+        );
+
+
+      if (
+        googleVariantMetafields.length > 0
+      ) {
+        const googleMetafieldInputs =
+          googleVariantMetafields.map(
+            (metafield) => ({
+              ownerId:
+                firstVariant.id,
+
+              namespace:
+                metafield.namespace,
+
+              key:
+                metafield.key,
+
+              type:
+                metafield.type,
+
+              value:
+                metafield.value,
+            })
+          );
+
+
+        console.log(
+          "GOOGLE VARIANT METAFIELDS SET:",
+          {
+            variantId:
+              firstVariant.id,
+
+            metafields:
+              googleMetafieldInputs,
+          }
+        );
+
+
+        const googleMetafieldsResponse =
+          await admin.graphql(
+            `#graphql
+              mutation SetGoogleVariantMetafields(
+                $metafields: [MetafieldsSetInput!]!
+              ) {
+                metafieldsSet(
+                  metafields: $metafields
+                ) {
+                  metafields {
+                    id
+                    namespace
+                    key
+                    value
+                  }
+
+                  userErrors {
+                    field
+                    message
+                    code
+                  }
+                }
+              }
+            `,
+            {
+              variables: {
+                metafields:
+                  googleMetafieldInputs,
+              },
+            }
+          );
+
+
+        const googleMetafieldsResult =
+          await googleMetafieldsResponse.json();
+
+
+        if (
+          googleMetafieldsResult
+            ?.errors
+            ?.length
+        ) {
+          console.error(
+            "GOOGLE VARIANT METAFIELD GRAPHQL ERRORS:",
+            googleMetafieldsResult.errors
+          );
+
+          throw new Error(
+            googleMetafieldsResult.errors
+              .map(
+                (error) =>
+                  error.message
+              )
+              .join(", ")
+          );
+        }
+
+
+        const googleMetafieldErrors =
+          googleMetafieldsResult
+            ?.data
+            ?.metafieldsSet
+            ?.userErrors || [];
+
+
+        if (
+          googleMetafieldErrors.length > 0
+        ) {
+          console.error(
+            "GOOGLE VARIANT METAFIELD ERRORS:",
+            googleMetafieldErrors
+          );
+
+          throw new Error(
+            googleMetafieldErrors
+              .map(
+                (error) =>
+                  error.message
+              )
+              .join(", ")
+          );
+        }
+
+
+        console.log(
+          "GOOGLE VARIANT METAFIELDS SAVED:",
+          googleMetafieldsResult
+            ?.data
+            ?.metafieldsSet
+            ?.metafields || []
+        );
+      }
     }
 
     /*
