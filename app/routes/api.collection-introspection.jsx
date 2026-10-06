@@ -22,20 +22,24 @@ export async function loader() {
       await admin.graphql(
         `#graphql
         query {
-          conditionsSource:
+          inclusion:
             __type(
               name:
-                "CollectionCreateConditionsSourceInput"
+                "CollectionCreateSourceInclusionInput"
             ) {
               name
+
               inputFields {
                 name
+
                 type {
                   kind
                   name
+
                   ofType {
                     kind
                     name
+
                     ofType {
                       kind
                       name
@@ -45,12 +49,40 @@ export async function loader() {
               }
             }
 
-          tagRelation:
+          inclusionCondition:
             __type(
               name:
-                "CollectionSourceInclusionConditionProductTagRelation"
+                "CollectionSourceInclusionConditionInput"
             ) {
               name
+
+              inputFields {
+                name
+
+                type {
+                  kind
+                  name
+
+                  ofType {
+                    kind
+                    name
+
+                    ofType {
+                      kind
+                      name
+                    }
+                  }
+                }
+              }
+            }
+
+          vendorRelation:
+            __type(
+              name:
+                "CollectionSourceInclusionConditionProductVendorRelation"
+            ) {
+              name
+
               enumValues {
                 name
               }
@@ -62,6 +94,7 @@ export async function loader() {
                 "CollectionConditionMatchType"
             ) {
               name
+
               enumValues {
                 name
               }
@@ -86,6 +119,7 @@ export async function loader() {
     return Response.json(
       {
         success: false,
+
         error:
           error?.message ||
           "Unbekannter Fehler",
