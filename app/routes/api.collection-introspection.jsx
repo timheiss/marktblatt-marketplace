@@ -22,10 +22,10 @@ export async function loader() {
       await admin.graphql(
         `#graphql
         query {
-          sourceTarget:
+          conditionsSource:
             __type(
               name:
-                "CollectionCreateSourceTargetInput"
+                "CollectionCreateConditionsSourceInput"
             ) {
               name
               inputFields {
@@ -45,49 +45,25 @@ export async function loader() {
               }
             }
 
-          inclusionCondition:
+          tagRelation:
             __type(
               name:
-                "CollectionSourceInclusionConditionInput"
+                "CollectionSourceInclusionConditionProductTagRelation"
             ) {
               name
-              inputFields {
+              enumValues {
                 name
-                type {
-                  kind
-                  name
-                  ofType {
-                    kind
-                    name
-                    ofType {
-                      kind
-                      name
-                    }
-                  }
-                }
               }
             }
 
-          productTagCondition:
+          matchType:
             __type(
               name:
-                "CollectionSourceInclusionConditionProductTagInput"
+                "CollectionConditionMatchType"
             ) {
               name
-              inputFields {
+              enumValues {
                 name
-                type {
-                  kind
-                  name
-                  ofType {
-                    kind
-                    name
-                    ofType {
-                      kind
-                      name
-                    }
-                  }
-                }
               }
             }
         }
@@ -110,7 +86,6 @@ export async function loader() {
     return Response.json(
       {
         success: false,
-
         error:
           error?.message ||
           "Unbekannter Fehler",
