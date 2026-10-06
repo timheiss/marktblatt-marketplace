@@ -562,7 +562,9 @@ async function publishCollection(
  * =========================================================
  */
 
-export async function loader() {
+export async function loader({
+  request,
+}) {
   try {
     const shop =
       process.env.MARKTBLATT_SHOP;
@@ -601,15 +603,104 @@ export async function loader() {
       );
 
 
-    const desiredCollections =
+    /*
+     * =====================================================
+     * BATCH-STEUERUNG
+     * =====================================================
+     *
+     * Beispiel:
+     *
+     * ?offset=0&limit=25
+     * ?offset=25&limit=25
+     *
+     * Maximal 25 Collections pro Aufruf.
+     */
+
+    const requestUrl =
+      new URL(request.url);
+
+    const requestedOffset =
+      Number(
+        requestUrl.searchParams.get(
+          "offset"
+        ) || 0
+      );
+
+    const requestedLimit =
+      Number(
+        requestUrl.searchParams.get(
+          "limit"
+        ) || 25
+      );
+
+
+    const offset =
+      Number.isInteger(
+        requestedOffset
+      ) &&
+      requestedOffset >= 0
+        ? requestedOffset
+        : 0;
+
+
+    const limit =
+      Number.isInteger(
+        requestedLimit
+      ) &&
+      requestedLimit > 0
+        ? Math.min(
+            requestedLimit,
+            25
+          )
+        : 25;
+
+
+    /*
+     * Gesamte Taxonomie erzeugen.
+     */
+
+    const allCollections =
       buildDesiredCollections();
+
+
+    /*
+     * Nur aktuellen Batch auswählen.
+     */
+
+    const desiredCollections =
+      allCollections.slice(
+        offset,
+        offset + limit
+      );
+
+
+    const nextOffset =
+      offset +
+      desiredCollections.length;
+
+
+    const hasMore =
+      nextOffset <
+      allCollections.length;
 
 
     console.log(
       "MARKTBLATT COLLECTION SYNC START:",
       {
-        collections:
+        total:
+          allCollections.length,
+
+        offset,
+
+        limit,
+
+        batchSize:
           desiredCollections.length,
+
+        nextOffset:
+          hasMore
+            ? nextOffset
+            : null,
 
         publications:
           targetPublications.map(
@@ -618,7 +709,6 @@ export async function loader() {
           ),
       }
     );
-
 
     const created = [];
     const existing = [];
@@ -777,21 +867,40 @@ export async function loader() {
     }
 
 
-    return Response.json({
-      success:
-        errors.length === 0,
+return Response.json({
+  success:
+    errors.length === 0,
 
-      total:
-        desiredCollections.length,
+  total:
+    allCollections.length,
 
-      createdCount:
-        created.length,
+  offset,
 
-      existingCount:
-        existing.length,
+  limit,
 
-      errorCount:
-        errors.length,
+  batchSize:
+    desiredCollections.length,
+
+  processedCount:
+    created.length +
+    existing.length +
+    errors.length,
+
+  nextOffset:
+    hasMore
+      ? nextOffset
+      : null,
+
+  hasMore,
+
+  createdCount:
+    created.length,
+
+  existingCount:
+    existing.length,
+
+  errorCount:
+    errors.length,
 
       publications:
         targetPublications.map(
