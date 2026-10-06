@@ -1981,6 +1981,117 @@ const metaDescription =
     const media =
       prepareMedia(product);
 
+/*
+ * =========================================================
+ * MARKTBLATT KATEGORIE-TAGS
+ * =========================================================
+ *
+ * Die Tags werden beim Veröffentlichen ausschließlich
+ * aus den in PostgreSQL gespeicherten Kategorie-IDs
+ * erzeugt.
+ *
+ * Dadurch werden keine vom Browser gelieferten Tags
+ * übernommen.
+ */
+
+let marktblattTags = [];
+
+try {
+  const {
+    findMarktblattCategory,
+    findMarktblattSubcategory,
+    buildMarktblattCategoryTags,
+  } = await import(
+    "../marktblatt-taxonomy.server"
+  );
+
+  const marktblattCategoryId =
+    product.marktblattCategoryId
+      ? String(
+          product.marktblattCategoryId
+        ).trim()
+      : null;
+
+  const marktblattSubcategoryId =
+    product.marktblattSubcategoryId
+      ? String(
+          product.marktblattSubcategoryId
+        ).trim()
+      : null;
+
+
+  /*
+   * Hauptkategorie validieren.
+   */
+
+  const marktblattCategory =
+    marktblattCategoryId
+      ? findMarktblattCategory(
+          marktblattCategoryId
+        )
+      : null;
+
+
+  /*
+   * Unterkategorie validieren.
+   *
+   * Sie muss ausdrücklich zur gespeicherten
+   * Hauptkategorie gehören.
+   */
+
+  const marktblattSubcategory =
+    marktblattCategoryId &&
+    marktblattSubcategoryId
+      ? findMarktblattSubcategory(
+          marktblattCategoryId,
+          marktblattSubcategoryId
+        )
+      : null;
+
+
+  if (
+    marktblattCategory &&
+    marktblattCategory.secondary !== true &&
+    marktblattSubcategory
+  ) {
+    marktblattTags =
+      buildMarktblattCategoryTags(
+        marktblattCategoryId,
+        marktblattSubcategoryId
+      );
+  }
+
+
+  console.log(
+    "MARKTBLATT PRODUCT TAGS:",
+    {
+      productId:
+        product.id,
+
+      categoryId:
+        marktblattCategoryId,
+
+      subcategoryId:
+        marktblattSubcategoryId,
+
+      tags:
+        marktblattTags,
+    }
+  );
+
+} catch (error) {
+  /*
+   * Ein Fehler bei den Marktblatt-Tags soll die
+   * Veröffentlichung nicht verhindern.
+   */
+
+  console.error(
+    "MARKTBLATT PRODUCT TAG ERROR:",
+    error
+  );
+
+  marktblattTags = [];
+}
 
     /*
      * =====================================================
@@ -2104,6 +2215,20 @@ const metaDescription =
  */
 status:
   "ACTIVE",
+
+/*
+ * Marktblatt Kategorie-Tags
+ *
+ * Diese Tags steuern später die automatischen
+ * Shopify-Kollektionen.
+ */
+
+...(marktblattTags.length
+  ? {
+      tags:
+        marktblattTags,
+    }
+  : {}),
 
               metafields: [
 ...shopifyTaxonomyMetafields,

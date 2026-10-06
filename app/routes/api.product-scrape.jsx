@@ -2427,6 +2427,133 @@ if (
 }
 
 /*
+ * =========================================================
+ * MARKTBLATT KATEGORIE ERKENNEN
+ * =========================================================
+ *
+ * Die Marktblatt-Kategorie wird anhand der Produktdaten
+ * sowie der bereits ermittelten Shopify-Taxonomie
+ * bestimmt.
+ *
+ * Die KI darf ausschließlich Kategorien aus unserer
+ * eigenen Marktblatt-Taxonomie auswählen.
+ *
+ * Ein Fehler bei dieser Klassifizierung darf den
+ * Produktimport niemals verhindern.
+ */
+
+product.marktblattCategoryId =
+  "other";
+
+product.marktblattCategoryName =
+  "Sonstiges";
+
+product.marktblattSubcategoryId =
+  "other-products";
+
+product.marktblattSubcategoryName =
+  "Weitere Produkte";
+
+product.marktblattCategoryConfidence =
+  0;
+
+product.marktblattCategoryTags = [
+  "mb:category:other",
+  "mb:subcategory:other-products",
+];
+
+
+try {
+  const {
+    classifyMarktblattProduct,
+  } = await import(
+    "../marktblatt-classification.server"
+  );
+
+
+  /*
+   * Shopify-Taxonomie-Pfad zusätzlich an die
+   * Marktblatt-Klassifizierung übergeben.
+   */
+
+  const classification =
+    await classifyMarktblattProduct({
+      ...product,
+
+      shopifyTaxonomyId:
+        taxonomy?.id ||
+        product.shopifyTaxonomyId ||
+        null,
+
+      shopifyTaxonomyName:
+        taxonomy?.name ||
+        product.shopifyTaxonomyName ||
+        null,
+
+      shopifyTaxonomyFullName:
+        taxonomy?.fullName ||
+        null,
+    });
+
+
+  if (classification) {
+    product.marktblattCategoryId =
+      classification.categoryId;
+
+    product.marktblattCategoryName =
+      classification.categoryName;
+
+    product.marktblattSubcategoryId =
+      classification.subcategoryId;
+
+    product.marktblattSubcategoryName =
+      classification.subcategoryName;
+
+    product.marktblattCategoryConfidence =
+      classification.confidence;
+
+    product.marktblattCategoryTags =
+      classification.tags;
+  }
+
+
+  console.log(
+    "SCRAPER MARKTBLATT CATEGORY RESULT:",
+    {
+      categoryId:
+        product.marktblattCategoryId,
+
+      categoryName:
+        product.marktblattCategoryName,
+
+      subcategoryId:
+        product.marktblattSubcategoryId,
+
+      subcategoryName:
+        product.marktblattSubcategoryName,
+
+      confidence:
+        product.marktblattCategoryConfidence,
+
+      tags:
+        product.marktblattCategoryTags,
+    }
+  );
+
+} catch (error) {
+  console.error(
+    "MARKTBLATT CATEGORY CLASSIFICATION ERROR:",
+    error
+  );
+
+  /*
+   * Der oben gesetzte Fallback bleibt bestehen:
+   *
+   * Sonstiges > Weitere Produkte
+   */
+}
+
+/*
  * TEMPORÄRE DEBUG-AUSGABE
  * Zusätzliche Produktdaten nur im Server-Log anzeigen.
  */
@@ -2453,6 +2580,23 @@ shopifyTaxonomyId: product.shopifyTaxonomyId,
 shopifyTaxonomyName: product.shopifyTaxonomyName,
 shopifyTaxonomyAttributes:
   product.shopifyTaxonomyAttributes,
+marktblattCategoryId:
+  product.marktblattCategoryId,
+
+marktblattCategoryName:
+  product.marktblattCategoryName,
+
+marktblattSubcategoryId:
+  product.marktblattSubcategoryId,
+
+marktblattSubcategoryName:
+  product.marktblattSubcategoryName,
+
+marktblattCategoryConfidence:
+  product.marktblattCategoryConfidence,
+
+marktblattCategoryTags:
+  product.marktblattCategoryTags,
   compareAtPrice: product.compareAtPrice,
   compareAtPriceSource: product.compareAtPriceSource,
 });

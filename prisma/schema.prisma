@@ -111,9 +111,9 @@ model VendorProfile {
   // Produkt-Metafelddefinition.
   discountMinimumOrderValue String?
 
-// Allgemeine Lieferzeit des Anbieters.
-// Gilt für alle Produkte dieses Anbieters.
-deliveryTimeInfo String?
+  // Allgemeine Lieferzeit des Anbieters.
+  // Gilt für alle Produkte dieses Anbieters.
+  deliveryTimeInfo String?
 
   /**
    * Automatisch ermittelbare Anbieterinformationen
@@ -183,6 +183,15 @@ model MarketplaceProduct {
   shopifyTaxonomyId   String?
   shopifyTaxonomyName String?
 
+  // Marktblatt eigene Produkt-Taxonomie
+  //
+  // Die sichtbaren Namen und Shopify-Tags werden nicht
+  // redundant gespeichert. Sie werden anhand dieser IDs
+  // aus marktblatt-taxonomy.server.js erzeugt.
+  marktblattCategoryId         String?
+  marktblattSubcategoryId      String?
+  marktblattCategoryConfidence Float?
+
   // Offizielle, validierte Shopify-Kategorieattribute.
   // Beispiel:
   // [
@@ -246,25 +255,22 @@ model MarketplaceProduct {
 
   /**
    * Marktblatt-Admin-Sperre
-   *
    * false:
    * Anbieter darf das Produkt selbst aktivieren/deaktivieren.
-   *
    * true:
    * Produkt wurde durch Marktblatt gesperrt und kann
    * vom Anbieter nicht wieder aktiviert werden.
    */
   adminLocked Boolean @default(false)
 
-/**
- * Kennzeichnet eine Statusänderung, die gerade
- * durch die Anbieter-App ausgelöst wurde.
- *
- * Dadurch kann der Shopify-Webhook unterscheiden:
- * Anbieter hat deaktiviert -> keine Admin-Sperre
- * Shopify-Admin hat deaktiviert -> Admin-Sperre
- */
-vendorStatusChangePending Boolean @default(false)
+  /**
+   * Kennzeichnet eine Statusänderung, die gerade
+   * durch die Anbieter-App ausgelöst wurde.
+   * Dadurch kann der Shopify-Webhook unterscheiden:
+   * Anbieter hat deaktiviert -> keine Admin-Sperre
+   * Shopify-Admin hat deaktiviert -> Admin-Sperre
+   */
+  vendorStatusChangePending Boolean @default(false)
 
   /**
    * =======================================================

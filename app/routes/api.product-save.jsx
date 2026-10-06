@@ -503,6 +503,47 @@ const shopifyTaxonomyName =
   );
 
 /*
+ * =========================================================
+ * MARKTBLATT PRODUKT-TAXONOMIE
+ * =========================================================
+ *
+ * Diese Werte wurden zuvor vom Scraper durch die
+ * Marktblatt-Klassifizierung ermittelt.
+ *
+ * Gespeichert werden nur die stabilen IDs und die
+ * Confidence. Namen und Tags werden später aus der
+ * zentralen Marktblatt-Taxonomie erzeugt.
+ */
+
+const marktblattCategoryId =
+  optionalText(
+    product.marktblattCategoryId
+  );
+
+const marktblattSubcategoryId =
+  optionalText(
+    product.marktblattSubcategoryId
+  );
+
+const rawMarktblattCategoryConfidence =
+  Number(
+    product.marktblattCategoryConfidence
+  );
+
+const marktblattCategoryConfidence =
+  Number.isFinite(
+    rawMarktblattCategoryConfidence
+  )
+    ? Math.max(
+        0,
+        Math.min(
+          1,
+          rawMarktblattCategoryConfidence
+        )
+      )
+    : null;
+
+/*
  * Validierte Shopify-Kategorieattribute.
  *
  * Nur Arrays übernehmen. Falls keine Attribute
@@ -719,6 +760,10 @@ itemGroupId,
 shopifyTaxonomyId,
 shopifyTaxonomyName,
 shopifyTaxonomyAttributes,
+
+marktblattCategoryId,
+marktblattSubcategoryId,
+marktblattCategoryConfidence,
 
 sourceUrl,
 images,
