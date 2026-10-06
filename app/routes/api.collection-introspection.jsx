@@ -76,6 +76,33 @@ export async function loader() {
               }
             }
 
+                      vendorInput:
+            __type(
+              name:
+                "CollectionSourceInclusionConditionProductVendorInput"
+            ) {
+              name
+
+              inputFields {
+                name
+
+                type {
+                  kind
+                  name
+
+                  ofType {
+                    kind
+                    name
+
+                    ofType {
+                      kind
+                      name
+                    }
+                  }
+                }
+              }
+            }
+
           vendorRelation:
             __type(
               name:
