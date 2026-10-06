@@ -2,32 +2,157 @@ import {
   unauthenticated,
 } from "../shopify.server";
 
+import {
+  MARKTBLATT_TAXONOMY,
+} from "../marktblatt-taxonomy.server";
+
+
 /*
  * =========================================================
- * MARKTBLATT COLLECTION SYNC
+ * VERTRIEBSKANÄLE
  * =========================================================
- *
- * TESTPHASE:
- *
- * Es wird zunächst ausschließlich die automatische
- * Shopify-Kollektion "Ohrringe" angelegt.
- *
- * Bedingung:
- *
- * Produkt besitzt den Tag:
- * mb:subcategory:earrings
- *
- * WICHTIG:
- *
- * Vor dem Erstellen wird geprüft, ob bereits eine
- * Marktblatt-Kollektion mit diesem Handle existiert.
  */
 
-const TEST_COLLECTION = {
-  title: "Ohrringe",
-  handle: "ohrringe",
-  tag: "mb:subcategory:earrings",
-};
+const TARGET_PUBLICATIONS = [
+  "onlineshop",
+  "online store",
+  "google & youtube",
+  "facebook & instagram",
+];
+
+const DESIRED_CHANNEL_GROUPS = [
+  {
+    label: "Onlineshop",
+    aliases: [
+      "onlineshop",
+      "online store",
+    ],
+  },
+  {
+    label: "Google & YouTube",
+    aliases: [
+      "google & youtube",
+    ],
+  },
+  {
+    label: "Facebook & Instagram",
+    aliases: [
+      "facebook & instagram",
+    ],
+  },
+];
+
+const EXCLUDED_VENDOR =
+  "Marktblatt Business Produkt";
+
+
+function normalizePublicationName(
+  value
+) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+
+/*
+ * =========================================================
+ * HANDLES
+ * =========================================================
+ */
+
+function buildCategoryHandle(
+  categoryId
+) {
+  return `mb-${categoryId}`;
+}
+
+
+function buildSubcategoryHandle(
+  categoryId,
+  subcategoryId
+) {
+  return (
+    `mb-${categoryId}-${subcategoryId}`
+  );
+}
+
+
+/*
+ * =========================================================
+ * GEWÜNSCHTE COLLECTIONS
+ * =========================================================
+ */
+
+function buildDesiredCollections() {
+  const collections = [];
+
+  for (
+    const category of
+    MARKTBLATT_TAXONOMY
+  ) {
+    /*
+     * Hauptkategorie
+     */
+
+    collections.push({
+      level: "category",
+
+      categoryId:
+        category.id,
+
+      subcategoryId:
+        null,
+
+      title:
+        category.name,
+
+      handle:
+        buildCategoryHandle(
+          category.id
+        ),
+
+      tag:
+        `mb:category:${category.id}`,
+    });
+
+
+    /*
+     * Unterkategorien
+     */
+
+    for (
+      const [
+        subcategoryId,
+        subcategoryName,
+      ] of category.subcategories
+    ) {
+      collections.push({
+        level:
+          "subcategory",
+
+        categoryId:
+          category.id,
+
+        subcategoryId,
+
+        title:
+          subcategoryName,
+
+        handle:
+          buildSubcategoryHandle(
+            category.id,
+            subcategoryId
+          ),
+
+        tag:
+          `mb:subcategory:${subcategoryId}`,
+      });
+    }
+  }
+
+  return collections;
+}
 
 
 /*
@@ -96,6 +221,13 @@ async function findCollectionByHandle(
  * =========================================================
  * AUTOMATISCHE COLLECTION ERSTELLEN
  * =========================================================
+ *
+ * Jede Collection besitzt ZWEI Bedingungen.
+ *
+ * ALLE müssen erfüllt sein:
+ *
+ * 1. Marktblatt-Kategorie-Tag vorhanden
+ * 2. Anbieter != "Marktblatt Business Produkt"
  */
 
 async function createTagCollection(
@@ -104,6 +236,7 @@ async function createTagCollection(
     title,
     handle,
     tag,
+    level,
   }
 ) {
   const response =
@@ -119,28 +252,6 @@ async function createTagCollection(
             id
             title
             handle
-
-            sources {
-              __typename
-              id
-              title
-
-              ... on CollectionConditionsSource {
-                inclusion {
-                  matchType
-
-                  conditions {
-                    __typename
-
-                    ... on CollectionSourceInclusionConditionProductTag {
-                      relation
-                      values
-                      matchType
-                    }
-                  }
-                }
-              }
-            }
           }
 
           userErrors {
@@ -160,13 +271,19 @@ async function createTagCollection(
               {
                 source: {
                   title:
-                    `Marktblatt: ${title}`,
+                    level === "category"
+                      ? `Marktblatt Hauptkategorie: ${title}`
+                      : `Marktblatt Unterkategorie: ${title}`,
 
                   inclusion: {
                     matchType:
                       "ALL",
 
                     conditions: [
+                      /*
+                       * Bedingung 1:
+                       * Marktblatt Kategorie-Tag
+                       */
                       {
                         productTag: {
                           relation:
@@ -174,6 +291,24 @@ async function createTagCollection(
 
                           values: [
                             tag,
+                          ],
+
+                          matchType:
+                            "ANY",
+                        },
+                      },
+
+                      /*
+                       * Bedingung 2:
+                       * Business-Produkte ausschließen
+                       */
+                      {
+                        productVendor: {
+                          relation:
+                            "NOT_EQUALS",
+
+                          values: [
+                            EXCLUDED_VENDOR,
                           ],
 
                           matchType:
@@ -194,11 +329,6 @@ async function createTagCollection(
     await response.json();
 
   if (result?.errors?.length) {
-    console.error(
-      "MARKTBLATT COLLECTION GRAPHQL ERRORS:",
-      result.errors
-    );
-
     throw new Error(
       result.errors
         .map(
@@ -217,11 +347,6 @@ async function createTagCollection(
     payload?.userErrors || [];
 
   if (userErrors.length) {
-    console.error(
-      "MARKTBLATT COLLECTION USER ERRORS:",
-      userErrors
-    );
-
     throw new Error(
       userErrors
         .map(
@@ -239,6 +364,195 @@ async function createTagCollection(
   }
 
   return payload.collection;
+}
+
+
+/*
+ * =========================================================
+ * PUBLICATIONS LADEN
+ * =========================================================
+ */
+
+async function getTargetPublications(
+  admin
+) {
+  const response =
+    await admin.graphql(
+      `#graphql
+      query MarktblattPublications {
+        publications(first: 100) {
+          nodes {
+            id
+            name
+          }
+        }
+      }
+      `
+    );
+
+  const result =
+    await response.json();
+
+  if (result?.errors?.length) {
+    throw new Error(
+      result.errors
+        .map(
+          (error) =>
+            error.message
+        )
+        .join(" ")
+    );
+  }
+
+  const publications =
+    result?.data
+      ?.publications
+      ?.nodes ?? [];
+
+
+  const targetPublications =
+    publications.filter(
+      (publication) =>
+        TARGET_PUBLICATIONS.includes(
+          normalizePublicationName(
+            publication.name
+          )
+        )
+    );
+
+
+  /*
+   * Prüfen, ob alle drei gewünschten
+   * Vertriebskanäle vorhanden sind.
+   */
+
+  const foundNames =
+    new Set(
+      targetPublications.map(
+        (publication) =>
+          normalizePublicationName(
+            publication.name
+          )
+      )
+    );
+
+
+  const missingChannels =
+    DESIRED_CHANNEL_GROUPS
+      .filter(
+        (group) =>
+          !group.aliases.some(
+            (alias) =>
+              foundNames.has(alias)
+          )
+      )
+      .map(
+        (group) =>
+          group.label
+      );
+
+
+  if (missingChannels.length) {
+    throw new Error(
+      `Folgende Vertriebskanäle wurden nicht gefunden: ${missingChannels.join(
+        ", "
+      )}`
+    );
+  }
+
+
+  return targetPublications;
+}
+
+
+/*
+ * =========================================================
+ * COLLECTION VERÖFFENTLICHEN
+ * =========================================================
+ */
+
+async function publishCollection(
+  admin,
+  collectionId,
+  targetPublications
+) {
+  const publicationInputs =
+    targetPublications.map(
+      (publication) => ({
+        publicationId:
+          publication.id,
+      })
+    );
+
+
+  const response =
+    await admin.graphql(
+      `#graphql
+      mutation PublishMarktblattCollection(
+        $id: ID!
+        $input: [PublicationInput!]!
+      ) {
+        publishablePublish(
+          id: $id
+          input: $input
+        ) {
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+      `,
+      {
+        variables: {
+          id:
+            collectionId,
+
+          input:
+            publicationInputs,
+        },
+      }
+    );
+
+
+  const result =
+    await response.json();
+
+
+  if (result?.errors?.length) {
+    throw new Error(
+      result.errors
+        .map(
+          (error) =>
+            error.message
+        )
+        .join(" ")
+    );
+  }
+
+
+  const userErrors =
+    result?.data
+      ?.publishablePublish
+      ?.userErrors ?? [];
+
+
+  if (userErrors.length) {
+    throw new Error(
+      userErrors
+        .map(
+          (error) =>
+            error.message
+        )
+        .join(" ")
+    );
+  }
+
+
+  return targetPublications.map(
+    (publication) =>
+      publication.name
+  );
 }
 
 
@@ -270,10 +584,6 @@ export async function loader() {
     }
 
 
-    /*
-     * Marktblatt-Shop Admin API laden.
-     */
-
     const { admin } =
       await unauthenticated.admin(
         shop
@@ -281,77 +591,220 @@ export async function loader() {
 
 
     /*
-     * =====================================================
-     * DUPLIKATSCHUTZ
-     * =====================================================
+     * Vertriebskanäle EINMAL vor dem
+     * Collection-Durchlauf laden.
      */
 
-    const existingCollection =
-      await findCollectionByHandle(
-        admin,
-        TEST_COLLECTION.handle
+    const targetPublications =
+      await getTargetPublications(
+        admin
       );
 
-    if (existingCollection) {
-      console.log(
-        "MARKTBLATT COLLECTION ALREADY EXISTS:",
-        existingCollection
-      );
 
-      return Response.json({
-        success: true,
-        action: "existing",
+    const desiredCollections =
+      buildDesiredCollections();
 
-        collection:
-          existingCollection,
-
-        expectedTag:
-          TEST_COLLECTION.tag,
-      });
-    }
-
-
-    /*
-     * =====================================================
-     * COLLECTION ERSTELLEN
-     * =====================================================
-     */
-
-    const collection =
-      await createTagCollection(
-        admin,
-        TEST_COLLECTION
-      );
 
     console.log(
-      "MARKTBLATT COLLECTION CREATED:",
+      "MARKTBLATT COLLECTION SYNC START:",
       {
-        id:
-          collection.id,
+        collections:
+          desiredCollections.length,
 
-        title:
-          collection.title,
-
-        handle:
-          collection.handle,
-
-        tag:
-          TEST_COLLECTION.tag,
-
-        sources:
-          collection.sources,
+        publications:
+          targetPublications.map(
+            (publication) =>
+              publication.name
+          ),
       }
     );
 
 
+    const created = [];
+    const existing = [];
+    const errors = [];
+
+
+    /*
+     * Collections bewusst nacheinander
+     * verarbeiten.
+     */
+
+    for (
+      const definition of
+      desiredCollections
+    ) {
+      try {
+        const existingCollection =
+          await findCollectionByHandle(
+            admin,
+            definition.handle
+          );
+
+
+        /*
+         * Bereits vorhandene Collection:
+         *
+         * Nicht neu erstellen.
+         * Aber trotzdem sicherstellen,
+         * dass sie auf den gewünschten
+         * Kanälen veröffentlicht ist.
+         */
+
+        if (existingCollection) {
+          const publishedChannels =
+            await publishCollection(
+              admin,
+              existingCollection.id,
+              targetPublications
+            );
+
+
+          existing.push({
+            ...definition,
+
+            shopifyCollectionId:
+              existingCollection.id,
+
+            shopifyTitle:
+              existingCollection.title,
+
+            publishedChannels,
+          });
+
+
+          console.log(
+            "MARKTBLATT COLLECTION EXISTS:",
+            {
+              title:
+                definition.title,
+
+              handle:
+                definition.handle,
+
+              publishedChannels,
+            }
+          );
+
+          continue;
+        }
+
+
+        /*
+         * Neue Collection erstellen.
+         */
+
+        const collection =
+          await createTagCollection(
+            admin,
+            definition
+          );
+
+
+        /*
+         * Direkt danach auf den drei
+         * gewünschten Kanälen veröffentlichen.
+         */
+
+        const publishedChannels =
+          await publishCollection(
+            admin,
+            collection.id,
+            targetPublications
+          );
+
+
+        created.push({
+          ...definition,
+
+          shopifyCollectionId:
+            collection.id,
+
+          publishedChannels,
+        });
+
+
+        console.log(
+          "MARKTBLATT COLLECTION CREATED:",
+          {
+            title:
+              definition.title,
+
+            handle:
+              definition.handle,
+
+            tag:
+              definition.tag,
+
+            id:
+              collection.id,
+
+            publishedChannels,
+          }
+        );
+
+      } catch (error) {
+        const message =
+          error?.message ||
+          "Unbekannter Fehler";
+
+
+        errors.push({
+          ...definition,
+
+          error:
+            message,
+        });
+
+
+        console.error(
+          "MARKTBLATT COLLECTION ERROR:",
+          {
+            title:
+              definition.title,
+
+            handle:
+              definition.handle,
+
+            tag:
+              definition.tag,
+
+            error:
+              message,
+          }
+        );
+      }
+    }
+
+
     return Response.json({
-      success: true,
-      action: "created",
+      success:
+        errors.length === 0,
 
-      collection,
+      total:
+        desiredCollections.length,
 
-      expectedTag:
-        TEST_COLLECTION.tag,
+      createdCount:
+        created.length,
+
+      existingCount:
+        existing.length,
+
+      errorCount:
+        errors.length,
+
+      publications:
+        targetPublications.map(
+          (publication) =>
+            publication.name
+        ),
+
+      excludedVendor:
+        EXCLUDED_VENDOR,
+
+      created,
+      existing,
+      errors,
     });
 
   } catch (error) {
