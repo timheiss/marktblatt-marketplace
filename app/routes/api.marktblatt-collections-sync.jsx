@@ -312,7 +312,7 @@ async function createTagCollection(
                           ],
 
                           matchType:
-                            "ANY",
+                            "ALL",
                         },
                       },
                     ],
