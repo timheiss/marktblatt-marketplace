@@ -22,23 +22,20 @@ export async function loader() {
       await admin.graphql(
         `#graphql
         query {
-          collectionCreateInput:
+          sourceTarget:
             __type(
-              name: "CollectionCreateInput"
+              name:
+                "CollectionCreateSourceTargetInput"
             ) {
               name
-
               inputFields {
                 name
-
                 type {
                   kind
                   name
-
                   ofType {
                     kind
                     name
-
                     ofType {
                       kind
                       name
@@ -48,50 +45,43 @@ export async function loader() {
               }
             }
 
-          collectionSourceInput:
-            __type(
-              name: "CollectionSourceInput"
-            ) {
-              name
-
-              inputFields {
-                name
-
-                type {
-                  kind
-                  name
-
-                  ofType {
-                    kind
-                    name
-
-                    ofType {
-                      kind
-                      name
-                    }
-                  }
-                }
-              }
-            }
-
-          conditionInput:
+          inclusionCondition:
             __type(
               name:
                 "CollectionSourceInclusionConditionInput"
             ) {
               name
-
               inputFields {
                 name
-
                 type {
                   kind
                   name
-
                   ofType {
                     kind
                     name
+                    ofType {
+                      kind
+                      name
+                    }
+                  }
+                }
+              }
+            }
 
+          productTagCondition:
+            __type(
+              name:
+                "CollectionSourceInclusionConditionProductTagInput"
+            ) {
+              name
+              inputFields {
+                name
+                type {
+                  kind
+                  name
+                  ofType {
+                    kind
+                    name
                     ofType {
                       kind
                       name
@@ -120,6 +110,7 @@ export async function loader() {
     return Response.json(
       {
         success: false,
+
         error:
           error?.message ||
           "Unbekannter Fehler",
