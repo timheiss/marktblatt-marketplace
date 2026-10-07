@@ -2453,11 +2453,14 @@ const metaDescription =
     offer?.lowPrice ??
     meta(
       'meta[property="product:price:amount"]'
-    );
+    ) ??
+    shopifyVariantData.price ??
+    null;
 
   if (
     price !== undefined &&
-    price !== null
+    price !== null &&
+    price !== ""
   ) {
     price =
       String(price).trim();
@@ -2634,6 +2637,9 @@ const productType =
   ) ||
   cleanText(
     product?.productType
+  ) ||
+  cleanText(
+    shopifyVariantData.productType
   ) ||
   null;
 
