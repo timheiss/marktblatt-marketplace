@@ -954,6 +954,214 @@ function getShopifyVariants(
     }
   });
 
+  /*
+   * =======================================================
+   * SHOPIFY INITDATA / PIXEL-DATEN
+   * =======================================================
+   *
+   * Shopify stellt auf vielen Shops vollständige
+   * Produktvariantendaten innerhalb von initData bereit.
+   *
+   * Diese Quelle kann enthalten:
+   *
+   * - Varianten-ID
+   * - SKU
+   * - Preis
+   * - Bild
+   * - Variantenname
+   * - Produkttyp
+   */
+
+  let shopifyProductType =
+    null;
+
+  let shopifyProductPrice =
+    null;
+
+  try {
+    const initDataMatch =
+      html.match(
+        /initData:\s*(\{[\s\S]*?\})\s*,\s*(?:browser|webPixels|customerPrivacy|analytics|eventDefinitions|trekkie)/
+      );
+
+    if (initDataMatch?.[1]) {
+      const initData =
+        JSON.parse(
+          initDataMatch[1]
+        );
+
+      const productVariants =
+        Array.isArray(
+          initData?.productVariants
+        )
+          ? initData.productVariants
+          : [];
+
+      /*
+       * Aktuelles Produkt anhand der URL bestimmen.
+       *
+       * Dadurch übernehmen wir keine Varianten aus
+       * Empfehlungen oder anderen Produkten.
+       */
+
+      let currentPathname =
+        null;
+
+      try {
+        currentPathname =
+          new URL(
+            pageUrl
+          ).pathname.replace(
+            /\/+$/,
+            ""
+          );
+      } catch {
+        currentPathname =
+          null;
+      }
+
+      const matchingVariants =
+        productVariants.filter(
+          (variant) => {
+            const productUrl =
+              variant?.product?.url;
+
+            if (
+              !productUrl ||
+              !currentPathname
+            ) {
+              return false;
+            }
+
+            try {
+              const pathname =
+                new URL(
+                  productUrl,
+                  pageUrl
+                ).pathname.replace(
+                  /\/+$/,
+                  ""
+                );
+
+              return (
+                pathname ===
+                currentPathname
+              );
+            } catch {
+              return false;
+            }
+          }
+        );
+
+
+      for (
+        const variant
+        of matchingVariants
+      ) {
+        if (!variant?.id) {
+          continue;
+        }
+
+        const id =
+          String(
+            variant.id
+          );
+
+        const existing =
+          variantsById.get(id) ||
+          {};
+
+        const amount =
+          variant?.price?.amount;
+
+        const normalizedPrice =
+          Number.isFinite(
+            Number(amount)
+          )
+            ? Number(
+                amount
+              ).toFixed(2)
+            : null;
+
+        const imageSource =
+          variant?.image?.src ||
+          null;
+
+        variantsById.set(
+          id,
+          {
+            ...existing,
+
+            id,
+
+            sku:
+              variant?.sku ||
+              existing?.sku ||
+              null,
+
+            public_title:
+              variant?.title ||
+              existing?.public_title ||
+              null,
+
+            title:
+              variant?.title ||
+              existing?.title ||
+              null,
+
+            price:
+              normalizedPrice ||
+              existing?.price ||
+              null,
+
+            image:
+              imageSource
+                ? {
+                    src:
+                      imageSource,
+                  }
+                : existing?.image ||
+                  null,
+          }
+        );
+
+
+        /*
+         * Produkttyp übernehmen.
+         */
+
+        if (
+          !shopifyProductType &&
+          variant?.product?.type
+        ) {
+          shopifyProductType =
+            cleanText(
+              variant.product.type
+            ) ||
+            null;
+        }
+
+
+        /*
+         * Hauptpreis:
+         * zunächst erster gültiger Variantenpreis.
+         */
+
+        if (
+          !shopifyProductPrice &&
+          normalizedPrice
+        ) {
+          shopifyProductPrice =
+            normalizedPrice;
+        }
+      }
+    }
+  } catch {
+    /*
+     * initData ist eine zusätzliche Shopify-Quelle.
+     * Fehler dürfen den normalen Scraper nicht stoppen.
+     */
+  }
 
   /*
    * =======================================================
@@ -1293,6 +1501,12 @@ function getShopifyVariants(
   return {
     options,
     variants,
+
+    productType:
+      shopifyProductType,
+
+    price:
+      shopifyProductPrice,
   };
 }
 
