@@ -978,189 +978,313 @@ function getShopifyVariants(
   let shopifyProductPrice =
     null;
 
-  try {
-    const initDataMatch =
-      html.match(
-        /initData:\s*(\{[\s\S]*?\})\s*,\s*(?:browser|webPixels|customerPrivacy|analytics|eventDefinitions|trekkie)/
-      );
+  const html =
+    $.html();
 
-    if (initDataMatch?.[1]) {
-      const initData =
-        JSON.parse(
-          initDataMatch[1]
+  try {
+    /*
+     * =====================================================
+     * INITDATA JSON-OBJEKT SICHER EXTRAHIEREN
+     * =====================================================
+     *
+     * Kein Regex für das Ende verwenden, da Shopify die
+     * Struktur nach initData verändern kann.
+     *
+     * Stattdessen wird das vollständige JSON-Objekt anhand
+     * seiner geschweiften Klammern ermittelt.
+     */
+
+    const marker =
+      "initData:";
+
+    const markerIndex =
+      html.indexOf(marker);
+
+    if (markerIndex !== -1) {
+      const objectStart =
+        html.indexOf(
+          "{",
+          markerIndex +
+            marker.length
         );
 
-      const productVariants =
-        Array.isArray(
-          initData?.productVariants
-        )
-          ? initData.productVariants
-          : [];
+      if (objectStart !== -1) {
+        let depth = 0;
+        let inString = false;
+        let escaped = false;
+        let objectEnd = -1;
 
-      /*
-       * Aktuelles Produkt anhand der URL bestimmen.
-       *
-       * Dadurch übernehmen wir keine Varianten aus
-       * Empfehlungen oder anderen Produkten.
-       */
+        for (
+          let index = objectStart;
+          index < html.length;
+          index += 1
+        ) {
+          const character =
+            html[index];
 
-      let currentPathname =
-        null;
+          /*
+           * Innerhalb eines JSON-Strings dürfen
+           * geschweifte Klammern nicht mitgezählt werden.
+           */
 
-      try {
-        currentPathname =
-          new URL(
-            pageUrl
-          ).pathname.replace(
-            /\/+$/,
-            ""
-          );
-      } catch {
-        currentPathname =
-          null;
-      }
-
-      const matchingVariants =
-        productVariants.filter(
-          (variant) => {
-            const productUrl =
-              variant?.product?.url;
+          if (inString) {
+            if (escaped) {
+              escaped = false;
+              continue;
+            }
 
             if (
-              !productUrl ||
-              !currentPathname
+              character === "\\"
             ) {
-              return false;
+              escaped = true;
+              continue;
             }
 
-            try {
-              const pathname =
-                new URL(
-                  productUrl,
-                  pageUrl
-                ).pathname.replace(
-                  /\/+$/,
-                  ""
-                );
+            if (
+              character === '"'
+            ) {
+              inString = false;
+            }
 
-              return (
-                pathname ===
-                currentPathname
-              );
-            } catch {
-              return false;
+            continue;
+          }
+
+          if (
+            character === '"'
+          ) {
+            inString = true;
+            continue;
+          }
+
+          if (
+            character === "{"
+          ) {
+            depth += 1;
+            continue;
+          }
+
+          if (
+            character === "}"
+          ) {
+            depth -= 1;
+
+            if (depth === 0) {
+              objectEnd =
+                index + 1;
+
+              break;
             }
           }
-        );
-
-
-      for (
-        const variant
-        of matchingVariants
-      ) {
-        if (!variant?.id) {
-          continue;
         }
 
-        const id =
-          String(
-            variant.id
-          );
 
-        const existing =
-          variantsById.get(id) ||
-          {};
+        if (objectEnd !== -1) {
+          const initDataJson =
+            html.slice(
+              objectStart,
+              objectEnd
+            );
 
-        const amount =
-          variant?.price?.amount;
+          const initData =
+            JSON.parse(
+              initDataJson
+            );
 
-        const normalizedPrice =
-          Number.isFinite(
-            Number(amount)
-          )
-            ? Number(
-                amount
-              ).toFixed(2)
-            : null;
-
-        const imageSource =
-          variant?.image?.src ||
-          null;
-
-        variantsById.set(
-          id,
-          {
-            ...existing,
-
-            id,
-
-            sku:
-              variant?.sku ||
-              existing?.sku ||
-              null,
-
-            public_title:
-              variant?.title ||
-              existing?.public_title ||
-              null,
-
-            title:
-              variant?.title ||
-              existing?.title ||
-              null,
-
-            price:
-              normalizedPrice ||
-              existing?.price ||
-              null,
-
-            image:
-              imageSource
-                ? {
-                    src:
-                      imageSource,
-                  }
-                : existing?.image ||
-                  null,
-          }
-        );
+          const productVariants =
+            Array.isArray(
+              initData?.productVariants
+            )
+              ? initData.productVariants
+              : [];
 
 
-        /*
-         * Produkttyp übernehmen.
-         */
+          /*
+           * =================================================
+           * AKTUELLES PRODUKT ANHAND DER URL BESTIMMEN
+           * =================================================
+           *
+           * initData kann zusätzlich Varianten anderer
+           * Produkte enthalten.
+           */
 
-        if (
-          !shopifyProductType &&
-          variant?.product?.type
-        ) {
-          shopifyProductType =
-            cleanText(
-              variant.product.type
-            ) ||
+          let currentPathname =
             null;
-        }
+
+          try {
+            currentPathname =
+              new URL(
+                pageUrl
+              ).pathname.replace(
+                /\/+$/,
+                ""
+              );
+          } catch {
+            currentPathname =
+              null;
+          }
 
 
-        /*
-         * Hauptpreis:
-         * zunächst erster gültiger Variantenpreis.
-         */
+          const matchingVariants =
+            productVariants.filter(
+              (variant) => {
+                const productUrl =
+                  variant?.product?.url;
 
-        if (
-          !shopifyProductPrice &&
-          normalizedPrice
-        ) {
-          shopifyProductPrice =
-            normalizedPrice;
+                if (
+                  !productUrl ||
+                  !currentPathname
+                ) {
+                  return false;
+                }
+
+                try {
+                  const pathname =
+                    new URL(
+                      productUrl,
+                      pageUrl
+                    ).pathname.replace(
+                      /\/+$/,
+                      ""
+                    );
+
+                  return (
+                    pathname ===
+                    currentPathname
+                  );
+                } catch {
+                  return false;
+                }
+              }
+            );
+
+
+          /*
+           * =================================================
+           * VARIANTENDATEN ÜBERNEHMEN
+           * =================================================
+           */
+
+          for (
+            const variant
+            of matchingVariants
+          ) {
+            if (!variant?.id) {
+              continue;
+            }
+
+            const id =
+              String(
+                variant.id
+              );
+
+            const existing =
+              variantsById.get(id) ||
+              {};
+
+            const amount =
+              variant?.price?.amount;
+
+            const normalizedPrice =
+              Number.isFinite(
+                Number(amount)
+              )
+                ? Number(
+                    amount
+                  ).toFixed(2)
+                : null;
+
+            const imageSource =
+              variant?.image?.src ||
+              null;
+
+
+            variantsById.set(
+              id,
+              {
+                ...existing,
+
+                id,
+
+                sku:
+                  variant?.sku ||
+                  existing?.sku ||
+                  null,
+
+                public_title:
+                  variant?.title ||
+                  existing?.public_title ||
+                  null,
+
+                title:
+                  variant?.title ||
+                  existing?.title ||
+                  null,
+
+                price:
+                  normalizedPrice ||
+                  existing?.price ||
+                  null,
+
+                /*
+                 * Die spätere Normalisierung erwartet
+                 * image.src.
+                 */
+
+                image:
+                  imageSource
+                    ? {
+                        src:
+                          imageSource,
+                      }
+                    : existing?.image ||
+                      null,
+              }
+            );
+
+
+            /*
+             * Produkttyp des aktuellen Produkts.
+             */
+
+            if (
+              !shopifyProductType &&
+              variant?.product?.type
+            ) {
+              shopifyProductType =
+                cleanText(
+                  variant.product.type
+                ) ||
+                null;
+            }
+
+
+            /*
+             * Hauptpreis zunächst aus der ersten
+             * gefundenen Variante übernehmen.
+             */
+
+            if (
+              !shopifyProductPrice &&
+              normalizedPrice
+            ) {
+              shopifyProductPrice =
+                normalizedPrice;
+            }
+          }
         }
       }
     }
-  } catch {
+  } catch (error) {
     /*
-     * initData ist eine zusätzliche Shopify-Quelle.
-     * Fehler dürfen den normalen Scraper nicht stoppen.
+     * initData ist nur eine zusätzliche Shopify-Quelle.
+     * Andere Scraper-Methoden müssen weiter funktionieren.
      */
+
+    console.warn(
+      "SHOPIFY INITDATA PARSE FAILED:",
+      error?.message ||
+        error
+    );
   }
 
   /*
@@ -1180,8 +1304,6 @@ function getShopifyVariants(
    * sku
    */
 
-  const html =
-    $.html();
 
   const analyticsMatch =
     html.match(
