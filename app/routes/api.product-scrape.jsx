@@ -820,6 +820,484 @@ function getOffer(product) {
 
 /*
  * =========================================================
+ * SHOPIFY PRODUKTVARIANTEN ERMITTELN
+ * =========================================================
+ *
+ * Shopify stellt auf Produktseiten häufig strukturierte
+ * Variantendaten direkt im HTML bereit.
+ *
+ * Ziel:
+ *
+ * - Optionsnamen erkennen, z. B. "Farbe"
+ * - alle Varianten erfassen
+ * - SKU
+ * - Preis
+ * - Verfügbarkeit
+ * - Variantenbild
+ * - externe Shopify-Variant-ID
+ *
+ * Die bestehende JSON-LD-Erkennung bleibt unverändert.
+ */
+
+function getShopifyVariants(
+  $,
+  pageUrl
+) {
+  const variantsById =
+    new Map();
+
+  const optionNames =
+    [];
+
+
+  /*
+   * =======================================================
+   * OPTION-NAMEN AUS VARIANT-PICKER
+   * =======================================================
+   *
+   * Beispiel:
+   *
+   * <input
+   *   name="Farbe-..."
+   *   value="Schwarz"
+   *   data-variant-id="..."
+   * >
+   */
+
+  $("variant-picker fieldset").each(
+    (_, fieldset) => {
+      const inputs =
+        $(fieldset).find(
+          'input[data-variant-id], input[data-option-value-id]'
+        );
+
+      if (!inputs.length) {
+        return;
+      }
+
+      const firstInput =
+        inputs.first();
+
+      const rawName =
+        cleanText(
+          firstInput.attr("name")
+        );
+
+      if (!rawName) {
+        return;
+      }
+
+      /*
+       * Shopify hängt häufig interne IDs an:
+       *
+       * Farbe-ABC123...
+       *
+       * Für Marktblatt benötigen wir nur "Farbe".
+       */
+
+      const optionName =
+        cleanText(
+          rawName.split("-")[0]
+        );
+
+      if (
+        optionName &&
+        !optionNames.includes(
+          optionName
+        )
+      ) {
+        optionNames.push(
+          optionName
+        );
+      }
+    }
+  );
+
+
+  /*
+   * =======================================================
+   * SHOPIFY VARIANT-JSON
+   * =======================================================
+   *
+   * Moderne Shopify-Themes legen die aktuell ausgewählte
+   * Variante häufig in:
+   *
+   * variant-picker script[type="application/json"]
+   *
+   * ab.
+   */
+
+  $(
+    'variant-picker script[type="application/json"]'
+  ).each((_, element) => {
+    const raw =
+      $(element).html();
+
+    if (!raw) {
+      return;
+    }
+
+    try {
+      const variant =
+        JSON.parse(raw);
+
+      if (!variant?.id) {
+        return;
+      }
+
+      variantsById.set(
+        String(variant.id),
+        variant
+      );
+    } catch {
+      // Ungültiges JSON ignorieren.
+    }
+  });
+
+
+  /*
+   * =======================================================
+   * VARIANTEN AUS SHOPIFY-ANALYTICS
+   * =======================================================
+   *
+   * Shopify gibt häufig zusätzlich:
+   *
+   * window.ShopifyAnalytics.meta.product.variants
+   *
+   * aus. Diese Struktur enthält insbesondere:
+   *
+   * id
+   * price
+   * public_title
+   * sku
+   */
+
+  const html =
+    $.html();
+
+  const analyticsMatch =
+    html.match(
+      /var\s+meta\s*=\s*(\{"product":\{[\s\S]*?\}\s*,\s*"page":\{[\s\S]*?\}\s*\});/
+    );
+
+  if (analyticsMatch?.[1]) {
+    try {
+      const analytics =
+        JSON.parse(
+          analyticsMatch[1]
+        );
+
+      const analyticsVariants =
+        analytics?.product
+          ?.variants;
+
+      if (
+        Array.isArray(
+          analyticsVariants
+        )
+      ) {
+        for (
+          const variant
+          of analyticsVariants
+        ) {
+          if (!variant?.id) {
+            continue;
+          }
+
+          const id =
+            String(variant.id);
+
+          const existing =
+            variantsById.get(id) ||
+            {};
+
+          variantsById.set(
+            id,
+            {
+              ...variant,
+              ...existing,
+            }
+          );
+        }
+      }
+    } catch {
+      /*
+       * Analytics-Daten sind nur eine zusätzliche Quelle.
+       * Fehler dürfen den normalen Scraper nicht stoppen.
+       */
+    }
+  }
+
+
+  /*
+   * =======================================================
+   * VARIANTEN AUS DEN OPTION-BUTTONS ERGÄNZEN
+   * =======================================================
+   */
+
+  $(
+    'variant-picker input[data-variant-id]'
+  ).each((_, element) => {
+    const input =
+      $(element);
+
+    const id =
+      cleanText(
+        input.attr(
+          "data-variant-id"
+        )
+      );
+
+    if (!id) {
+      return;
+    }
+
+    const value =
+      cleanText(
+        input.attr("value")
+      );
+
+    const existing =
+      variantsById.get(id) ||
+      {};
+
+    variantsById.set(
+      id,
+      {
+        ...existing,
+
+        id,
+
+        public_title:
+          existing.public_title ||
+          value ||
+          null,
+
+        title:
+          existing.title ||
+          value ||
+          null,
+      }
+    );
+  });
+
+
+  /*
+   * =======================================================
+   * NORMALISIEREN
+   * =======================================================
+   */
+
+  const variants =
+    Array.from(
+      variantsById.values()
+    )
+      .map((variant) => {
+        let variantPrice =
+          variant?.price;
+
+        /*
+         * Shopify verwendet je nach Datenquelle:
+         *
+         * 1650  = 16,50 EUR
+         * 16.5  = 16,50 EUR
+         */
+
+        if (
+          typeof variantPrice ===
+            "number" &&
+          Number.isFinite(
+            variantPrice
+          )
+        ) {
+          if (
+            Number.isInteger(
+              variantPrice
+            ) &&
+            variantPrice >= 100
+          ) {
+            variantPrice =
+              (
+                variantPrice / 100
+              ).toFixed(2);
+          } else {
+            variantPrice =
+              variantPrice.toFixed(
+                2
+              );
+          }
+        } else if (
+          variantPrice !==
+            undefined &&
+          variantPrice !== null
+        ) {
+          variantPrice =
+            String(
+              variantPrice
+            ).trim();
+        } else {
+          variantPrice = null;
+        }
+
+
+        let image = null;
+
+        const imageSource =
+          variant?.featured_image
+            ?.src ||
+          variant?.featured_media
+            ?.preview_image
+            ?.src ||
+          variant?.image?.src ||
+          null;
+
+        if (imageSource) {
+          image =
+            absoluteUrl(
+              imageSource,
+              pageUrl
+            );
+        }
+
+
+        const optionValues =
+          Array.isArray(
+            variant?.options
+          )
+            ? variant.options
+                .map(
+                  (value) =>
+                    cleanText(value)
+                )
+                .filter(Boolean)
+            : [];
+
+
+        if (
+          !optionValues.length
+        ) {
+          const publicTitle =
+            cleanText(
+              variant?.public_title
+            ) ||
+            cleanText(
+              variant?.title
+            );
+
+          if (publicTitle) {
+            optionValues.push(
+              ...publicTitle
+                .split(" / ")
+                .map(
+                  (value) =>
+                    cleanText(value)
+                )
+                .filter(Boolean)
+            );
+          }
+        }
+
+
+        const options = {};
+
+        optionValues.forEach(
+          (value, index) => {
+            const name =
+              optionNames[index] ||
+              `Option ${index + 1}`;
+
+            options[name] =
+              value;
+          }
+        );
+
+
+        return {
+          id:
+            variant?.id
+              ? String(
+                  variant.id
+                )
+              : null,
+
+          title:
+            cleanText(
+              variant?.public_title
+            ) ||
+            cleanText(
+              variant?.title
+            ) ||
+            null,
+
+          sku:
+            cleanText(
+              variant?.sku
+            ) ||
+            null,
+
+          price:
+            variantPrice,
+
+          available:
+            typeof variant?.available ===
+              "boolean"
+              ? variant.available
+              : null,
+
+          image,
+
+          options,
+        };
+      })
+      .filter(
+        (variant) =>
+          variant.id
+      );
+
+
+  /*
+   * Optionsübersicht erzeugen:
+   *
+   * [
+   *   {
+   *     name: "Farbe",
+   *     values: [
+   *       "Schwarz",
+   *       "Braun",
+   *       "Bronze"
+   *     ]
+   *   }
+   * ]
+   */
+
+  const options =
+    optionNames.map(
+      (name) => ({
+        name,
+
+        values: [
+          ...new Set(
+            variants
+              .map(
+                (variant) =>
+                  variant
+                    .options?.[name]
+              )
+              .filter(Boolean)
+          ),
+        ],
+      })
+    );
+
+
+  return {
+    options,
+    variants,
+  };
+}
+
+/*
+ * =========================================================
  * STREICHPREIS / VERGLEICHSPREIS ERMITTELN
  * =========================================================
  *
@@ -1504,6 +1982,18 @@ function extractProduct(
   const offer =
     getOffer(product);
 
+const shopifyVariantData =
+  getShopifyVariants(
+    $,
+    pageUrl
+  );
+
+const options =
+  shopifyVariantData.options;
+
+const variants =
+  shopifyVariantData.variants;
+
   const meta = (selector) =>
     cleanText(
       $(selector)
@@ -2127,6 +2617,9 @@ metaDescription,
   brand,
   vendor: shopName,
   sourceUrl: pageUrl,
+
+  options,
+  variants,
 
   sku,
   gtin,
