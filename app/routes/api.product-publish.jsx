@@ -2989,6 +2989,100 @@ if (hasMultipleVariants) {
  */
 
 if (variantMediaInputs.length > 0) {
+  /*
+   * Warten, bis Shopify alle Variantenbilder
+   * vollständig verarbeitet hat.
+   */
+
+  const requiredMediaIds = new Set(
+    variantMediaInputs.flatMap(
+      (item) => item.mediaIds
+    )
+  );
+
+  let allMediaReady = false;
+
+  for (let attempt = 1; attempt <= 15; attempt++) {
+    const mediaStatusResponse = await admin.graphql(
+      `#graphql
+        query CheckMarketplaceMediaStatus($productId: ID!) {
+          product(id: $productId) {
+            media(first: 250) {
+              nodes {
+                id
+                status
+              }
+            }
+          }
+        }
+      `,
+      {
+        variables: {
+          productId: shopifyProductId,
+        },
+      }
+    );
+
+    const mediaStatusResult =
+      await mediaStatusResponse.json();
+
+    if (mediaStatusResult.errors?.length) {
+      throw new Error(
+        mediaStatusResult.errors
+          .map((error) => error.message)
+          .join(", ")
+      );
+    }
+
+    if (!mediaStatusResult.data?.product) {
+      throw new Error(
+        "Shopify-Produkt bei der Bildprüfung nicht gefunden."
+      );
+    }
+
+    const mediaStatuses = new Map(
+      (mediaStatusResult.data.product.media?.nodes || [])
+        .map((item) => [item.id, item.status])
+    );
+
+    allMediaReady = [...requiredMediaIds].every(
+      (id) => mediaStatuses.get(id) === "READY"
+    );
+
+    console.log(
+      `MARKTBLATT BILDSTATUS VERSUCH ${attempt}:`,
+      [...requiredMediaIds].map((id) => ({
+        id,
+        status: mediaStatuses.get(id) || "NICHT GEFUNDEN",
+      }))
+    );
+
+    if (allMediaReady) {
+      break;
+    }
+
+    const failedMedia = [...requiredMediaIds].filter(
+      (id) => mediaStatuses.get(id) === "FAILED"
+    );
+
+    if (failedMedia.length > 0) {
+      throw new Error(
+        "Shopify konnte mindestens ein Variantenbild nicht verarbeiten."
+      );
+    }
+
+    if (attempt < 15) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, 2000)
+      );
+    }
+  }
+
+  if (!allMediaReady) {
+    throw new Error(
+      "Die Variantenbilder sind nach 30 Sekunden noch nicht bereit. Der Shopify-Entwurf bleibt zur Prüfung erhalten."
+    );
+  }
   const appendMediaResponse =
     await admin.graphql(
       `#graphql
