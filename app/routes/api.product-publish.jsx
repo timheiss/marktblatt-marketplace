@@ -2811,13 +2811,12 @@ if (hasMultipleVariants) {
         ? { price: String(variant.price) }
         : {}),
 
-      ...(variant.sku
-        ? {
-            inventoryItem: {
-              sku: String(variant.sku),
-            },
-          }
-        : {}),
+inventoryItem: {
+  tracked: false,
+  ...(variant.sku
+    ? { sku: String(variant.sku) }
+    : {}),
+},
     })
   );
 
@@ -3215,13 +3214,10 @@ variants: [
     compareAtPrice:
       validCompareAtPrice,
 
-...(sku !== null
-  ? {
-      inventoryItem: {
-        sku,
-      },
-    }
-  : {}),
+inventoryItem: {
+  tracked: false,
+  ...(sku !== null ? { sku } : {}),
+},
 
     ...(barcode !== null
       ? {

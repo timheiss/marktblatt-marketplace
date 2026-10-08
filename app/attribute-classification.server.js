@@ -37,6 +37,20 @@ export async function classifyProductAttributes(
   const productType =
     String(product?.productType || "").trim();
 
+  /*
+   * Produktoptionen und Varianten für die
+   * Shopify-Attributerkennung bereitstellen.
+   */
+
+  const productOptions =
+    Array.isArray(product?.options)
+      ? product.options
+      : [];
+
+  const productVariants =
+    Array.isArray(product?.variants)
+      ? product.variants
+      : [];
 
   /*
    * Shopify-Attribute für die KI kompakt aufbereiten.
@@ -119,6 +133,23 @@ ${sourceCategory}
 
 Source product type:
 ${productType}
+
+Product options:
+${JSON.stringify(productOptions)}
+
+Product variants:
+${JSON.stringify(
+  productVariants.map((variant) => ({
+    options: variant.options,
+  }))
+)}
+
+IMPORTANT:
+Product variants are direct evidence of available
+colors, sizes and other product attributes.
+Consider ALL variant option values when selecting
+the applicable Shopify taxonomy attributes.
+Only use official Shopify taxonomy values and IDs.
 
 Shopify category:
 ${taxonomyCategory?.name || ""}
