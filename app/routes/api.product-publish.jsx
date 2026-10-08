@@ -112,55 +112,57 @@ function parseImages(value) {
  */
 
 function prepareMedia(product) {
-  const images =
-    parseImages(product.images);
+  const images = parseImages(product.images);
+
+  const variants = Array.isArray(product.variants)
+    ? product.variants
+    : [];
 
   const seen = new Set();
   const media = [];
 
-  for (const image of images) {
-    if (
-      !image ||
-      typeof image !== "string"
-    ) {
-      continue;
+  function addImage(image) {
+    if (!image || typeof image !== "string") {
+      return;
     }
 
     try {
       const url = new URL(image);
 
-      if (
-        !["http:", "https:"].includes(
-          url.protocol
-        )
-      ) {
-        continue;
+      if (!["http:", "https:"].includes(url.protocol)) {
+        return;
       }
 
       if (seen.has(url.href)) {
-        continue;
+        return;
       }
 
       seen.add(url.href);
 
-      media.push({
-        originalSource:
-          url.href,
-
-        mediaContentType:
-          "IMAGE",
-
-        alt:
-          product.title ||
-          "Produktbild",
-      });
-
-      if (media.length >= 5) {
-        break;
-      }
+media.push({
+  originalSource: url.href,
+  mediaContentType: "IMAGE",
+  alt: `Marktblatt-Bild-${media.length + 1}`,
+});
     } catch {
-      // UngÃƒÂ¼ltige Bild-URL ignorieren.
+      // Ungültige Bild-URL ignorieren.
     }
+  }
+
+  /*
+   * Bisherige allgemeine Produktbilder übernehmen.
+   * Maximal fünf allgemeine Bilder.
+   */
+  for (const image of images.slice(0, 5)) {
+    addImage(image);
+  }
+
+  /*
+   * Zusätzlich sämtliche Variantenbilder übernehmen.
+   * Doppelte Bild-URLs werden automatisch übersprungen.
+   */
+  for (const variant of variants) {
+    addImage(variant?.image);
   }
 
   return media;
@@ -1553,6 +1555,7 @@ function prepareGoogleVariantMetafields(
  */
 
 export const action = async ({ request }) => {
+let createdShopifyProductId = null;
   let cors = (response) => response;
 
   try {
@@ -1983,6 +1986,48 @@ const metaDescription =
 
 /*
  * =========================================================
+ * PRODUKTOPTIONEN UND VARIANTEN VORBEREITEN
+ * =========================================================
+ */
+
+const productOptions =
+  Array.isArray(product.options)
+    ? product.options
+    : [];
+
+const productVariants =
+  Array.isArray(product.variants)
+    ? product.variants
+    : [];
+
+const hasMultipleVariants =
+  productOptions.length > 0 &&
+  productVariants.length > 0 &&
+  productVariants.every(
+    (variant) =>
+      variant &&
+      typeof variant.options === "object" &&
+      variant.options !== null &&
+      productOptions.every(
+        (option) =>
+          String(
+            variant.options[option.name] ?? ""
+          ).trim() !== ""
+      )
+  );
+
+console.log(
+  "MARKTBLATT VARIANTEN VORBEREITET:",
+  {
+    productId: product.id,
+    hasMultipleVariants,
+    options: productOptions,
+    variantCount: productVariants.length,
+  }
+);
+
+/*
+ * =========================================================
  * MARKTBLATT KATEGORIE-TAGS
  * =========================================================
  *
@@ -2124,17 +2169,23 @@ try {
                   }
                 }
 
-                media(first: 5) {
-                  nodes {
-                    id
-                    alt
-                    mediaContentType
+media(first: 250) {
+  nodes {
+    id
+    alt
+    mediaContentType
 
-                    preview {
-                      status
-                    }
-                  }
-                }
+    ... on MediaImage {
+      image {
+        url
+      }
+    }
+
+    preview {
+      status
+    }
+  }
+}
               }
 
               userErrors {
@@ -2157,6 +2208,28 @@ try {
                   : "",
 
               vendor,
+
+/*
+ * =========================================================
+ * DYNAMISCHE SHOPIFY-PRODUKTOPTIONEN
+ * =========================================================
+ *
+ * Unterstützt beliebige Eigenschaften wie:
+ * Farbe, Größe, Material, Länge usw.
+ */
+
+...(hasMultipleVariants
+  ? {
+      productOptions:
+        productOptions.map((option) => ({
+          name: String(option.name),
+
+          values: option.values.map((value) => ({
+            name: String(value),
+          })),
+        })),
+    }
+  : {}),
 
 /*
  * Produkttyp
@@ -2214,7 +2287,7 @@ try {
  * Vertriebskanälen erfolgt anschließend separat.
  */
 status:
-  "ACTIVE",
+  "DRAFT",
 
 /*
  * Marktblatt Kategorie-Tags
@@ -2685,14 +2758,305 @@ status:
       );
     }
 
-    const shopifyProductId =
-      createdProduct.id;
+const shopifyProductId =
+  createdProduct.id;
+createdShopifyProductId = shopifyProductId;
 
-    const firstVariant =
-      createdProduct
-        ?.variants
-        ?.nodes?.[0];
+/*
+ * =====================================================
+ * SHOPIFY-PRODUKT-ID FRÜHZEITIG SICHERN
+ * =====================================================
+ *
+ * Das Shopify-Produkt wurde erstellt, befindet
+ * sich aber noch im Status DRAFT.
+ *
+ * Die ID wird sofort gespeichert, damit bei einem
+ * späteren Fehler kein zweites Produkt angelegt wird.
+ */
 
+await db.marketplaceProduct.update({
+  where: {
+    id: product.id,
+  },
+
+  data: {
+    shopifyProductId,
+    shopifyHandle:
+      createdProduct.handle || null,
+    status: "draft",
+  },
+});
+
+let firstVariant =
+  createdProduct
+    ?.variants
+    ?.nodes?.[0];
+
+let createdShopifyVariants = [];
+
+if (hasMultipleVariants) {
+  const variantInputs = productVariants.map(
+    (variant) => ({
+      optionValues: productOptions.map(
+        (option) => ({
+          optionName: String(option.name),
+          name: String(
+            variant.options[option.name]
+          ),
+        })
+      ),
+
+      ...(variant.price != null &&
+      String(variant.price).trim() !== ""
+        ? { price: String(variant.price) }
+        : {}),
+
+      ...(variant.sku
+        ? {
+            inventoryItem: {
+              sku: String(variant.sku),
+            },
+          }
+        : {}),
+    })
+  );
+
+  const bulkResponse = await admin.graphql(
+    `#graphql
+      mutation CreateMarketplaceVariants(
+        $productId: ID!
+        $variants: [ProductVariantsBulkInput!]!
+      ) {
+        productVariantsBulkCreate(
+          productId: $productId
+          variants: $variants
+          strategy: REMOVE_STANDALONE_VARIANT
+        ) {
+          productVariants {
+            id
+            price
+            selectedOptions {
+              name
+              value
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `,
+    {
+      variables: {
+        productId: shopifyProductId,
+        variants: variantInputs,
+      },
+    }
+  );
+
+  const bulkResult =
+    await bulkResponse.json();
+
+  if (bulkResult?.errors?.length) {
+    throw new Error(
+      bulkResult.errors
+        .map((error) => error.message)
+        .join(", ")
+    );
+  }
+
+  const bulkErrors =
+    bulkResult?.data
+      ?.productVariantsBulkCreate
+      ?.userErrors || [];
+
+  if (bulkErrors.length > 0) {
+    throw new Error(
+      bulkErrors
+        .map((error) => error.message)
+        .join(", ")
+    );
+  }
+
+  createdShopifyVariants =
+    bulkResult?.data
+      ?.productVariantsBulkCreate
+      ?.productVariants || [];
+
+  if (
+    createdShopifyVariants.length !==
+    productVariants.length
+  ) {
+    throw new Error(
+      "Shopify hat nicht alle Produktvarianten erstellt."
+    );
+  }
+
+  firstVariant =
+    createdShopifyVariants[0] || null;
+}
+
+/*
+ * =====================================================
+ * VARIANTENBILDER VORBEREITEN
+ * =====================================================
+ */
+
+if (hasMultipleVariants) {
+  const normalizeImageUrl = (value) => {
+    try {
+      const url = new URL(String(value));
+      return ["http:", "https:"].includes(url.protocol)
+        ? url.href
+        : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const mediaBySourceUrl = new Map();
+
+  media.forEach((item, index) => {
+    const url = normalizeImageUrl(item.originalSource);
+
+    if (url) {
+      mediaBySourceUrl.set(url, `Marktblatt-Bild-${index + 1}`);
+    }
+  });
+
+  const shopifyMediaByAlt = new Map(
+    (createdProduct.media?.nodes || [])
+      .filter((item) => item.id && item.alt)
+      .map((item) => [item.alt, item.id])
+  );
+
+  const shopifyVariantByOptions = new Map(
+    createdShopifyVariants.map((variant) => [
+      JSON.stringify(
+        productOptions.map((option) =>
+          String(
+            variant.selectedOptions?.find(
+              (selected) => selected.name === option.name
+            )?.value ?? ""
+          )
+        )
+      ),
+      variant.id,
+    ])
+  );
+
+  const variantMediaInputs = [];
+
+  for (const variant of productVariants) {
+    if (!variant.image) continue;
+
+    const imageUrl = normalizeImageUrl(variant.image);
+    const imageAlt = mediaBySourceUrl.get(imageUrl);
+    const mediaId = shopifyMediaByAlt.get(imageAlt);
+
+    const optionKey = JSON.stringify(
+      productOptions.map((option) =>
+        String(variant.options?.[option.name] ?? "")
+      )
+    );
+
+    const variantId = shopifyVariantByOptions.get(optionKey);
+
+    if (!mediaId || !variantId) {
+      throw new Error(
+        `Variantenbild konnte nicht zugeordnet werden: ${
+          variant.title || variant.sku || optionKey
+        }`
+      );
+    }
+
+    variantMediaInputs.push({
+      variantId,
+      mediaIds: [mediaId],
+    });
+  }
+
+  console.log(
+    "MARKTBLATT VARIANTENBILDER VORBEREITET:",
+    variantMediaInputs
+  );
+
+/*
+ * =====================================================
+ * VARIANTENBILDER MIT SHOPIFY VERKNÜPFEN
+ * =====================================================
+ */
+
+if (variantMediaInputs.length > 0) {
+  const appendMediaResponse =
+    await admin.graphql(
+      `#graphql
+        mutation AppendMarketplaceVariantMedia(
+          $productId: ID!
+          $variantMedia: [ProductVariantAppendMediaInput!]!
+        ) {
+          productVariantAppendMedia(
+            productId: $productId
+            variantMedia: $variantMedia
+          ) {
+            productVariants {
+              id
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      {
+        variables: {
+          productId: shopifyProductId,
+          variantMedia: variantMediaInputs,
+        },
+      }
+    );
+
+  const appendMediaResult =
+    await appendMediaResponse.json();
+
+  if (appendMediaResult?.errors?.length) {
+    throw new Error(
+      appendMediaResult.errors
+        .map((error) => error.message)
+        .join(", ")
+    );
+  }
+
+  const appendMediaPayload =
+    appendMediaResult?.data
+      ?.productVariantAppendMedia;
+
+  if (!appendMediaPayload) {
+    throw new Error(
+      "Shopify hat keine Antwort zur Variantenbild-Verknüpfung geliefert."
+    );
+  }
+
+  const appendMediaErrors =
+    appendMediaPayload.userErrors || [];
+
+  if (appendMediaErrors.length > 0) {
+    throw new Error(
+      appendMediaErrors
+        .map((error) => error.message)
+        .join(", ")
+    );
+  }
+
+  console.log(
+    "MARKTBLATT VARIANTENBILDER VERKNÜPFT:",
+    variantMediaInputs.length
+  );
+}
+
+}
 
     /*
      * =====================================================
@@ -2705,6 +3069,7 @@ status:
       null;
 
 if (
+  !hasMultipleVariants &&
   firstVariant?.id &&
   (
     price !== null ||
@@ -2845,43 +3210,46 @@ variants: [
      * eine MPN vorhanden ist.
      */
 
-    if (firstVariant?.id) {
-      const googleVariantMetafields =
-        prepareGoogleVariantMetafields(
-          product,
-          shopifyTaxonomyAttributes
-        );
+const googleTargetVariants =
+  hasMultipleVariants
+    ? createdShopifyVariants
+    : firstVariant?.id
+      ? [firstVariant]
+      : [];
+
+if (googleTargetVariants.length > 0) {
+  const googleVariantMetafields =
+    prepareGoogleVariantMetafields(
+      product,
+      shopifyTaxonomyAttributes
+    );
 
 
       if (
         googleVariantMetafields.length > 0
       ) {
-        const googleMetafieldInputs =
-          googleVariantMetafields.map(
-            (metafield) => ({
-              ownerId:
-                firstVariant.id,
-
-              namespace:
-                metafield.namespace,
-
-              key:
-                metafield.key,
-
-              type:
-                metafield.type,
-
-              value:
-                metafield.value,
-            })
-          );
+const googleMetafieldInputs =
+  googleTargetVariants.flatMap(
+    (variant) =>
+      googleVariantMetafields.map(
+        (metafield) => ({
+          ownerId: variant.id,
+          namespace: metafield.namespace,
+          key: metafield.key,
+          type: metafield.type,
+          value: metafield.value,
+        })
+      )
+  );
 
 
         console.log(
           "GOOGLE VARIANT METAFIELDS SET:",
           {
-            variantId:
-              firstVariant.id,
+variantIds:
+  googleTargetVariants.map(
+    (variant) => variant.id
+  ),
 
             metafields:
               googleMetafieldInputs,
@@ -2889,99 +3257,171 @@ variants: [
         );
 
 
-        const googleMetafieldsResponse =
-          await admin.graphql(
-            `#graphql
-              mutation SetGoogleVariantMetafields(
-                $metafields: [MetafieldsSetInput!]!
-              ) {
-                metafieldsSet(
-                  metafields: $metafields
-                ) {
-                  metafields {
-                    id
-                    namespace
-                    key
-                    value
-                  }
+/*
+ * Google-Metafelder in Gruppen speichern.
+ * Shopify erlaubt maximal 25 pro Aufruf.
+ */
 
-                  userErrors {
-                    field
-                    message
-                    code
-                  }
-                }
-              }
-            `,
-            {
-              variables: {
-                metafields:
-                  googleMetafieldInputs,
-              },
+for (
+  let offset = 0;
+  offset < googleMetafieldInputs.length;
+  offset += 25
+) {
+  const metafieldBatch =
+    googleMetafieldInputs.slice(
+      offset,
+      offset + 25
+    );
+
+  const googleMetafieldsResponse =
+    await admin.graphql(
+      `#graphql
+        mutation SetGoogleVariantMetafields(
+          $metafields: [MetafieldsSetInput!]!
+        ) {
+          metafieldsSet(
+            metafields: $metafields
+          ) {
+            metafields {
+              id
+              namespace
+              key
+              value
             }
-          );
 
-
-        const googleMetafieldsResult =
-          await googleMetafieldsResponse.json();
-
-
-        if (
-          googleMetafieldsResult
-            ?.errors
-            ?.length
-        ) {
-          console.error(
-            "GOOGLE VARIANT METAFIELD GRAPHQL ERRORS:",
-            googleMetafieldsResult.errors
-          );
-
-          throw new Error(
-            googleMetafieldsResult.errors
-              .map(
-                (error) =>
-                  error.message
-              )
-              .join(", ")
-          );
+            userErrors {
+              field
+              message
+              code
+            }
+          }
         }
+      `,
+      {
+        variables: {
+          metafields: metafieldBatch,
+        },
+      }
+    );
 
+  const googleMetafieldsResult =
+    await googleMetafieldsResponse.json();
 
-        const googleMetafieldErrors =
-          googleMetafieldsResult
-            ?.data
-            ?.metafieldsSet
-            ?.userErrors || [];
+  if (googleMetafieldsResult?.errors?.length) {
+    throw new Error(
+      googleMetafieldsResult.errors
+        .map((error) => error.message)
+        .join(", ")
+    );
+  }
 
+  const metafieldsPayload =
+    googleMetafieldsResult?.data
+      ?.metafieldsSet;
 
-        if (
-          googleMetafieldErrors.length > 0
-        ) {
-          console.error(
-            "GOOGLE VARIANT METAFIELD ERRORS:",
-            googleMetafieldErrors
-          );
+  if (!metafieldsPayload) {
+    throw new Error(
+      "Shopify hat keine Antwort zur Speicherung der Google-Metafelder geliefert."
+    );
+  }
 
-          throw new Error(
-            googleMetafieldErrors
-              .map(
-                (error) =>
-                  error.message
-              )
-              .join(", ")
-          );
-        }
+  const googleMetafieldErrors =
+    metafieldsPayload.userErrors || [];
 
+  if (googleMetafieldErrors.length > 0) {
+    throw new Error(
+      googleMetafieldErrors
+        .map((error) => error.message)
+        .join(", ")
+    );
+  }
 
-        console.log(
-          "GOOGLE VARIANT METAFIELDS SAVED:",
-          googleMetafieldsResult
-            ?.data
-            ?.metafieldsSet
-            ?.metafields || []
-        );
+  console.log(
+    "GOOGLE VARIANT METAFIELDS SAVED:",
+    {
+      batch:
+        Math.floor(offset / 25) + 1,
+      count: metafieldBatch.length,
+      saved:
+        metafieldsPayload.metafields?.length || 0,
+    }
+  );
+}
       }
     }
+
+/*
+ * =====================================================
+ * SHOPIFY-PRODUKT AKTIVIEREN
+ * =====================================================
+ */
+
+const activateResponse = await admin.graphql(
+  `#graphql
+    mutation ActivateMarketplaceProduct(
+      $product: ProductUpdateInput!
+    ) {
+      productUpdate(product: $product) {
+        product {
+          id
+          status
+        }
+        userErrors {
+          field
+          message
+        }
+      }
+    }
+  `,
+  {
+    variables: {
+      product: {
+        id: shopifyProductId,
+        status: "ACTIVE",
+      },
+    },
+  }
+);
+
+const activateResult =
+  await activateResponse.json();
+
+if (activateResult?.errors?.length) {
+  throw new Error(
+    activateResult.errors
+      .map((error) => error.message)
+      .join(", ")
+  );
+}
+
+const activateErrors =
+  activateResult?.data
+    ?.productUpdate
+    ?.userErrors || [];
+
+if (activateErrors.length > 0) {
+  throw new Error(
+    activateErrors
+      .map((error) => error.message)
+      .join(", ")
+  );
+}
+
+if (
+  activateResult?.data
+    ?.productUpdate
+    ?.product
+    ?.status !== "ACTIVE"
+) {
+  throw new Error(
+    "Shopify konnte das Produkt nicht aktivieren."
+  );
+}
+
+console.log(
+  "MARKTBLATT PRODUKT AKTIVIERT:",
+  shopifyProductId
+);
 
     /*
      * =====================================================
@@ -3183,6 +3623,69 @@ variants: [
       }
     }
 
+/*
+ * =====================================================
+ * SHOPIFY-VARIANTEN-IDS ZUORDNEN
+ * =====================================================
+ */
+
+let variantsWithShopifyIds = productVariants;
+
+if (hasMultipleVariants) {
+  const makeVariantKey = (options) =>
+    JSON.stringify(
+      productOptions.map((option) => [
+        String(option.name),
+        String(options?.[option.name] ?? ""),
+      ])
+    );
+
+  const shopifyVariantsByOptions = new Map();
+
+  for (const variant of createdShopifyVariants) {
+    const selectedOptions = Object.fromEntries(
+      (variant.selectedOptions || []).map(
+        (option) => [
+          option.name,
+          option.value,
+        ]
+      )
+    );
+
+    const key = makeVariantKey(selectedOptions);
+
+    if (shopifyVariantsByOptions.has(key)) {
+      throw new Error(
+        "Shopify hat doppelte Variantenkombinationen zurückgegeben."
+      );
+    }
+
+    shopifyVariantsByOptions.set(
+      key,
+      variant.id
+    );
+  }
+
+  variantsWithShopifyIds = productVariants.map(
+    (variant) => {
+      const key = makeVariantKey(variant.options);
+
+      const shopifyVariantId =
+        shopifyVariantsByOptions.get(key);
+
+      if (!shopifyVariantId) {
+        throw new Error(
+          `Keine Shopify-ID für Variante ${variant.title || variant.sku || key} gefunden.`
+        );
+      }
+
+      return {
+        ...variant,
+        shopifyVariantId,
+      };
+    }
+  );
+}
 
     const updatedProduct =
       await db.marketplaceProduct.update({
@@ -3196,13 +3699,19 @@ variants: [
            * Shopify-Zuordnung
            */
 
-          shopifyProductId,
+shopifyProductId,
 
-          shopifyVariantId:
-            firstVariant?.id ||
-            null,
+shopifyVariantId:
+  firstVariant?.id ||
+  null,
 
-          shopifyHandle:
+...(hasMultipleVariants
+  ? {
+      variants: variantsWithShopifyIds,
+    }
+  : {}),
+
+shopifyHandle:
             createdProduct.handle ||
             null,
 
@@ -3280,21 +3789,32 @@ message:
       error
     );
 
-    return cors(
-      Response.json(
-        {
-          success: false,
+return cors(
+  Response.json(
+    {
+      success: false,
 
-          error:
-            error instanceof Error
-              ? error.message
-              : "Produkt konnte nicht veröffentlicht werden.",
-        },
-        {
-          status: 500,
-        }
-      )
-    );
+      error:
+        error instanceof Error
+          ? error.message
+          : "Produkt konnte nicht veröffentlicht werden.",
+
+      shopifyProductId:
+        createdShopifyProductId,
+
+      requiresReview:
+        Boolean(createdShopifyProductId),
+
+      message:
+        createdShopifyProductId
+          ? "Das Shopify-Produkt wurde bereits angelegt. Die Veröffentlichung ist jedoch fehlgeschlagen. Bitte den Entwurf prüfen, bevor der Vorgang erneut gestartet wird."
+          : "Die Veröffentlichung konnte nicht abgeschlossen werden.",
+    },
+    {
+      status: 500,
+    }
+  )
+);
   }
 };
 
