@@ -452,6 +452,26 @@ const color =
 const size =
   optionalText(product.size);
 
+/*
+ * =====================================================
+ * PRODUKTOPTIONEN UND VARIANTEN
+ * =====================================================
+ *
+ * Speichert die vom Scraper erkannten Optionen
+ * und Varianten als strukturierte JSON-Daten.
+ */
+
+const options =
+  Array.isArray(product.options) &&
+  product.options.length > 0
+    ? product.options
+    : undefined;
+
+const variants =
+  Array.isArray(product.variants) &&
+  product.variants.length > 0
+    ? product.variants
+    : undefined;
 
 /*
  * SEO / META-DATEN
@@ -748,9 +768,12 @@ material,
 color,
 size,
 
+// Produktoptionen und Varianten
+...(options !== undefined ? { options } : {}),
+...(variants !== undefined ? { variants } : {}),
+
 metaTitle,
 metaDescription,
-
 condition,
 gender,
 ageGroup,

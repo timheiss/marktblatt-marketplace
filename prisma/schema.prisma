@@ -213,6 +213,20 @@ model MarketplaceProduct {
   size        String?
 
   /**
+   * Produktoptionen und Varianten
+   *
+   * options:
+   * z. B. Farbe -> Schwarz, Braun, Bronze
+   *
+   * variants:
+   * enthält die einzelnen Varianten inklusive
+   * SKU, Preis, Bild und Optionswerten.
+   */
+
+  options  Json?
+  variants Json?
+
+  /**
    * SEO / Meta-Daten
    */
 
