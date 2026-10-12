@@ -78,6 +78,23 @@ async function readLimitedRequest(request) {
   return Buffer.concat(chunks, totalSize);
 }
 
+export const loader = async ({ request }) => {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
+  }
+
+  return Response.json(
+    { error: "Methode nicht unterstützt." },
+    {
+      status: 405,
+      headers: corsHeaders,
+    }
+  );
+};
+
 export const action = async ({ request }) => {
   if (request.method === "OPTIONS") {
     return new Response(null, {
