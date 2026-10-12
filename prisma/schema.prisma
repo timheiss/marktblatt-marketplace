@@ -157,8 +157,9 @@ model MarketplaceProduct {
    * Produktdaten
    */
 
-  title       String
-  description String?
+  title           String
+  description     String?
+  descriptionHtml String? @db.Text
 
   price    String?
   currency String?

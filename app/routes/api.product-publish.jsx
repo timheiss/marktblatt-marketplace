@@ -1,4 +1,5 @@
 import db from "../db.server";
+import sanitizeHtml from "sanitize-html";
 import {
   authenticate,
   unauthenticated,
@@ -1820,6 +1821,12 @@ let createdShopifyProductId = null;
           ).trim()
         : "";
 
+    const descriptionHtml =
+      product.descriptionHtml
+        ? String(
+            product.descriptionHtml
+          ).trim()
+        : "";
     const vendor =
       String(
         product.vendor ||
@@ -2200,11 +2207,29 @@ media(first: 250) {
             product: {
               title,
 
-              descriptionHtml:
-                description
-                  ? `<p>${escapeHtml(
-                      description
-                    )}</p>`
+              descriptionHtml: descriptionHtml
+                ? sanitizeHtml(descriptionHtml, {
+                    allowedTags: [
+                      "p",
+                      "br",
+                      "strong",
+                      "b",
+                      "em",
+                      "i",
+                      "u",
+                      "h2",
+                      "h3",
+                      "h4",
+                      "ul",
+                      "ol",
+                      "li",
+                      "blockquote"
+                    ],
+                    allowedAttributes: {},
+                    disallowedTagsMode: "discard"
+                  })
+                : description
+                  ? `<p>${escapeHtml(description)}</p>`
                   : "",
 
               vendor,

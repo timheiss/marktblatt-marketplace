@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import sanitizeHtml from "sanitize-html";
 import dns from "node:dns/promises";
 import net from "node:net";
 
@@ -2465,6 +2466,46 @@ const metaDescription =
         )
       : null;
 
+  const rawDescriptionHtml =
+    hasMultipleVariants
+      ? $(
+          [
+            ".product__description",
+            ".product-description",
+            ".product_description",
+            ".product-single__description",
+            ".product__info-container .rte",
+            "[data-product-description]",
+            ".details-content rte-formatter.rte"
+          ].join(",")
+        )
+          .first()
+          .html() || null
+      : null;
+
+  const descriptionHtml = rawDescriptionHtml
+    ? sanitizeHtml(rawDescriptionHtml, {
+        allowedTags: [
+          "p",
+          "br",
+          "strong",
+          "b",
+          "em",
+          "i",
+          "u",
+          "h2",
+          "h3",
+          "h4",
+          "ul",
+          "ol",
+          "li",
+          "blockquote"
+        ],
+        allowedAttributes: {},
+        disallowedTagsMode: "discard"
+      }).trim() || null
+    : null;
+
   const description =
     htmlDescription ||
     cleanText(
@@ -2984,7 +3025,8 @@ const compareAtPriceSource =
 return {
   title,
   description,
-metaTitle,
+  descriptionHtml,
+  metaTitle,
 metaDescription,
   price,
   currency,

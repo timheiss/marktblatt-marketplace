@@ -366,6 +366,13 @@ export const action = async ({ request }) => {
           ).trim()
         : null;
 
+    const descriptionHtml =
+      product.descriptionHtml
+        ? String(
+            product.descriptionHtml
+          ).trim()
+        : null;
+
     const price =
       product.price !== undefined &&
       product.price !== null &&
@@ -749,6 +756,7 @@ if (vendorLinks) {
 
           title,
           description,
+          descriptionHtml,
 
 price,
 currency,
