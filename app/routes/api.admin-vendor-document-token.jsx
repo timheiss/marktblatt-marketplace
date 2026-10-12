@@ -4,6 +4,29 @@ import { authenticate } from "../shopify.server";
 
 const ALLOWED_SHOP = "0yr6cb-b4.myshopify.com";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "https://extensions.shopifycdn.com",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+export const loader = async ({ request }) => {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
+  }
+
+  return Response.json(
+    { success: false, error: "Methode nicht erlaubt." },
+    {
+      status: 405,
+      headers: corsHeaders,
+    }
+  );
+};
+
 export const action = async ({ request }) => {
   const { session, sessionToken, cors } =
     await authenticate.admin(request);
