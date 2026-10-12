@@ -1907,6 +1907,32 @@ const vendorProfile =
     },
   });
 
+/*
+ * =========================================================
+ * ANBIETER-VERIFIZIERUNG PRÜFEN
+ * =========================================================
+ *
+ * Nur verifizierte Anbieter dürfen Produkte veröffentlichen.
+ * Das Vorbereiten und Speichern bleibt weiterhin erlaubt.
+ */
+
+if (vendorProfile?.verificationStatus !== "verified") {
+  return cors(
+    Response.json(
+      {
+        success: false,
+        error:
+          "Dein Anbieterprofil ist noch nicht verifiziert. " +
+          "Bitte schließe die Anbieter-Verifizierung ab, " +
+          "bevor du Produkte veröffentlichst.",
+      },
+      {
+        status: 403,
+      }
+    )
+  );
+}
+
 const vendorBackgroundImageId =
   vendorProfile?.backgroundImageId
     ? String(
