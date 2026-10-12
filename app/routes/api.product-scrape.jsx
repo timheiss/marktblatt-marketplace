@@ -2433,7 +2433,40 @@ const metaDescription =
    * BESCHREIBUNG
    */
 
+  /*
+   * BESCHREIBUNG
+   *
+   * Bei Produkten mit mehreren Varianten bevorzugen wir
+   * die vollständige Beschreibung aus dem HTML.
+   *
+   * Produkte ohne mehrere Varianten bleiben unverändert.
+   */
+
+  const hasMultipleVariants =
+    Array.isArray(variants) &&
+    variants.length > 1;
+
+  const htmlDescription =
+    hasMultipleVariants
+      ? cleanText(
+          $(
+            [
+              ".product__description",
+              ".product-description",
+              ".product_description",
+              ".product-single__description",
+              ".product__description .rte",
+              ".product__info-container .rte",
+              "[data-product-description]"
+            ].join(",")
+          )
+            .first()
+            .text()
+        )
+      : null;
+
   const description =
+    htmlDescription ||
     cleanText(
       product?.description
     ) ||
