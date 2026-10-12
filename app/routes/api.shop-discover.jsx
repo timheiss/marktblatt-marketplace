@@ -97,8 +97,17 @@ async function fetchText(input, hostname, redirects = 0) {
       {
         timeout: TIMEOUT_MS,
         agent: false,
-        lookup: (_hostname, _options, callback) => {
-          callback(null, pinnedAddress, 4);
+                lookup: (_hostname, options, callback) => {
+          if (options?.all) {
+            callback(null, [
+              {
+                address: pinnedAddress,
+                family: 4,
+              },
+            ]);
+          } else {
+            callback(null, pinnedAddress, 4);
+          }
         },
         headers: {
           "User-Agent": "Marktblatt-Shop-Discovery/1.0",
