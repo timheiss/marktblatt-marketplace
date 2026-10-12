@@ -2455,9 +2455,9 @@ const metaDescription =
               ".product-description",
               ".product_description",
               ".product-single__description",
-              ".product__description .rte",
               ".product__info-container .rte",
-              "[data-product-description]"
+              "[data-product-description]",
+              ".details-content rte-formatter.rte"
             ].join(",")
           )
             .first()
