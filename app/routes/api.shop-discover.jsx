@@ -284,7 +284,21 @@ export const action = async ({ request }) => {
 
       try {
         xml = await fetchText(sitemapUrl, hostname);
-      } catch {
+
+        console.log(
+          "SHOP DISCOVERY SITEMAP OK:",
+          sitemapUrl,
+          "Zeichen:",
+          xml.length
+        );
+
+      } catch (error) {
+        console.error(
+          "SHOP DISCOVERY SITEMAP FAILED:",
+          sitemapUrl,
+          error.message
+        );
+
         continue;
       }
 
