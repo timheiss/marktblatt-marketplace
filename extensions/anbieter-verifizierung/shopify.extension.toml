@@ -1,0 +1,15 @@
+api_version = "2026-07"
+
+[[extensions]]
+name = "Anbieter-Verifizierung"
+handle = "anbieter-verifizierung"
+type = "ui_extension"
+uid = "682ef02f-988e-0636-64e9-a43cc3191848a007a2a7"
+
+[[extensions.targeting]]
+module = "./src/OrderStatusBlock.jsx"
+target = "customer-account.page.render"
+
+[extensions.capabilities]
+api_access = true
+network_access = true

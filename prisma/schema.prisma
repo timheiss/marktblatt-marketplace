@@ -127,6 +127,23 @@ model VendorProfile {
   tiktokUrl     String?
   youtubeUrl    String?
 
+  // Anbieter-Verifizierung
+  verificationStatus String @default("not_submitted")
+
+  // Unternehmensangaben
+  verificationCompanyName String?
+  verificationShopUrl     String?
+
+  // Geschützter Verweis auf den hochgeladenen Nachweis
+  verificationDocumentKey String?
+
+  // Zeitpunkt der Antragstellung und Entscheidung
+  verificationSubmittedAt DateTime?
+  verificationReviewedAt  DateTime?
+
+  // Interne Rückmeldung von Marktblatt
+  verificationReviewNote String?
+
   /**
    * Verwaltung
    */
@@ -329,4 +346,17 @@ model MarketplaceProduct {
   @@index([customerId])
   @@index([status])
   @@index([sourceUrl])
+}
+
+model VerificationDownloadToken {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  customerId String
+  shop       String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([expiresAt])
+  @@index([customerId])
 }
