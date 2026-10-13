@@ -1,4 +1,5 @@
 import db from "../db.server";
+import sharp from "sharp";
 import {
   authenticate,
   unauthenticated,
@@ -209,6 +210,49 @@ export const action = async ({ request }) => {
           {
             status: 400,
           }
+        )
+      );
+    }
+
+    /*
+     * =====================================================
+     * BILDFORMAT 2:1 PRÜFEN
+     * =====================================================
+     */
+
+    const imageBuffer = Buffer.from(
+      await image.arrayBuffer()
+    );
+
+    let metadata;
+
+    try {
+      metadata = await sharp(imageBuffer).metadata();
+    } catch {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error: "Die Bilddatei ist ungültig oder beschädigt.",
+          },
+          { status: 400 }
+        )
+      );
+    }
+
+    if (
+      !metadata.width ||
+      !metadata.height ||
+      metadata.width !== metadata.height * 2
+    ) {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error:
+              "Das Hintergrundbild muss das Seitenverhältnis 2:1 haben, z. B. 1600 × 800 Pixel.",
+          },
+          { status: 400 }
         )
       );
     }
