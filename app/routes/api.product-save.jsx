@@ -1,6 +1,7 @@
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
 
+
 /*
  * =========================================================
  * URL NORMALISIEREN
@@ -276,8 +277,36 @@ export const action = async ({ request }) => {
      * =====================================================
      */
 
-    const usedProducts =
-      await db.marketplaceProduct.count({
+const importResult = await db.$transaction(async (tx) => {
+  await tx.$queryRaw`
+    SELECT "id"
+    FROM "Subscription"
+    WHERE "customerId" = ${customerId}
+    FOR UPDATE
+  `;
+
+  const currentSubscription = await tx.subscription.findUnique({
+    where: { customerId },
+  });
+
+  if (
+    !currentSubscription ||
+    currentSubscription.status !== "active"
+  ) {
+    throw new Error("SUBSCRIPTION_INACTIVE");
+  }
+
+  if (
+    !Number.isInteger(currentSubscription.productLimit) ||
+    currentSubscription.productLimit < 1
+  ) {
+    throw new Error("SUBSCRIPTION_INVALID_LIMIT");
+  }
+
+  const productLimit = currentSubscription.productLimit;
+
+  const usedProducts =
+    await tx.marketplaceProduct.count({
         where: {
           customerId,
 
@@ -294,25 +323,11 @@ export const action = async ({ request }) => {
      * =====================================================
      */
 
-    if (usedProducts >= productLimit) {
-      return cors(
-        Response.json(
-          {
-            success: false,
-
-            error:
-              `Ihr Produktlimit von ${productLimit} Produkten ist erreicht.`,
-
-            productLimit,
-            usedProducts,
-            availableProducts: 0,
-          },
-          {
-            status: 403,
-          }
-        )
-      );
-    }
+if (usedProducts >= productLimit) {
+  throw new Error(
+    `PRODUCT_LIMIT_REACHED:${productLimit}:${usedProducts}`
+  );
+}
 
 
     /*
@@ -321,8 +336,8 @@ export const action = async ({ request }) => {
      * =====================================================
      */
 
-    const existingProduct =
-      await db.marketplaceProduct.findFirst({
+const existingProduct =
+  await tx.marketplaceProduct.findFirst({
         where: {
           customerId,
           sourceUrl,
@@ -333,24 +348,11 @@ export const action = async ({ request }) => {
         },
       });
 
-    if (existingProduct) {
-      return cors(
-        Response.json(
-          {
-            success: false,
-
-            error:
-              "Dieses Produkt wurde bereits übernommen.",
-
-            existingProductId:
-              existingProduct.id,
-          },
-          {
-            status: 409,
-          }
-        )
-      );
-    }
+if (existingProduct) {
+  throw new Error(
+    `PRODUCT_ALREADY_EXISTS:${existingProduct.id}`
+  );
+}
 
 
     /*
@@ -706,7 +708,7 @@ if (vendorLinks) {
       vendorLinkData
     ).length > 0
   ) {
-    await db.vendorProfile.upsert({
+await tx.vendorProfile.upsert({
       where: {
         customerId,
       },
@@ -743,8 +745,8 @@ if (vendorLinks) {
      * gesetzt.
      */
 
-    const savedProduct =
-      await db.marketplaceProduct.create({
+const savedProduct =
+  await tx.marketplaceProduct.create({
         data: {
           customerId,
 
@@ -817,11 +819,33 @@ status: "draft",
     const newUsedProducts =
       usedProducts + 1;
 
-    const availableProducts =
-      Math.max(
-        productLimit - newUsedProducts,
-        0
-      );
+const availableProducts =
+  Math.max(
+    productLimit - newUsedProducts,
+    0
+  );
+
+return {
+  savedProduct,
+  usedProducts,
+  newUsedProducts,
+  availableProducts,
+  productLimit,
+  subscriptionPackage: currentSubscription.package,
+};
+}, {
+  timeout: 20000,
+  maxWait: 10000,
+});
+
+const {
+  savedProduct,
+  usedProducts,
+  newUsedProducts,
+  availableProducts,
+  productLimit: currentProductLimit,
+  subscriptionPackage,
+} = importResult;
 
 
     /*
@@ -885,11 +909,10 @@ status: "draft",
             savedProduct.createdAt,
         },
 
-        package: {
-          package:
-            subscription.package,
+package: {
+  package: subscriptionPackage,
 
-          productLimit,
+  productLimit: currentProductLimit,
 
           usedProducts:
             newUsedProducts,
@@ -904,6 +927,66 @@ status: "draft",
       "PRODUCT SAVE ERROR:",
       error
     );
+
+const errorMessage =
+  error instanceof Error ? error.message : "";
+
+if (errorMessage === "SUBSCRIPTION_INACTIVE") {
+  return cors(
+    Response.json(
+      {
+        success: false,
+        error: "Das Marktblatt-Paket ist nicht aktiv oder nicht vorhanden.",
+      },
+      { status: 403 }
+    )
+  );
+}
+
+if (errorMessage === "SUBSCRIPTION_INVALID_LIMIT") {
+  return cors(
+    Response.json(
+      {
+        success: false,
+        error: "Für dieses Paket ist kein gültiges Produktlimit hinterlegt.",
+      },
+      { status: 403 }
+    )
+  );
+}
+
+if (errorMessage.startsWith("PRODUCT_LIMIT_REACHED:")) {
+  const [, limit, used] = errorMessage.split(":");
+
+  return cors(
+    Response.json(
+      {
+        success: false,
+        error: `Ihr Produktlimit von ${limit} Produkten ist erreicht.`,
+        productLimit: Number(limit),
+        usedProducts: Number(used),
+        availableProducts: 0,
+      },
+      { status: 403 }
+    )
+  );
+}
+
+if (errorMessage.startsWith("PRODUCT_ALREADY_EXISTS:")) {
+  const existingProductId =
+    errorMessage.substring("PRODUCT_ALREADY_EXISTS:".length);
+
+  return cors(
+    Response.json(
+      {
+        success: false,
+        error: "Dieses Produkt wurde bereits übernommen.",
+        existingProductId,
+      },
+      { status: 409 }
+    )
+  );
+}
 
     return cors(
       Response.json(
