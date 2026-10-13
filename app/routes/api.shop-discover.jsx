@@ -179,6 +179,10 @@ async function fetchText(input, hostname, redirects = 0) {
 }
 
 function looksLikeProduct(url, productSitemap) {
+  if (url.pathname === "/" || url.pathname === "") {
+    return false;
+  }
+
   if (productSitemap) return true;
 
   return /\/(products|product|produkt|produkte|artikel|p)\//i.test(
