@@ -58,6 +58,311 @@ const [packageData, setPackageData] = useState({
   const [savingProduct, setSavingProduct] =
     useState(false);
 
+  /*
+   * =======================================================
+   * AUTOMATISCHER SHOP-IMPORT
+   * =======================================================
+   */
+
+  const [shopImportUrl, setShopImportUrl] =
+    useState('');
+
+  const [shopImportSearching, setShopImportSearching] =
+    useState(false);
+
+  const [shopImportProducts, setShopImportProducts] =
+    useState([]);
+
+  const [shopImportSelected, setShopImportSelected] =
+    useState([]);
+
+  const [shopImportMessage, setShopImportMessage] =
+  useState(null);
+
+const [shopImportPreview, setShopImportPreview] =
+  useState(null);
+
+const [shopImportPreviewLoading, setShopImportPreviewLoading] =
+  useState(false);
+
+const [shopImportPreviewLoadingUrl, setShopImportPreviewLoadingUrl] =
+  useState(null);  
+
+const [shopImportRemovedImages, setShopImportRemovedImages] =
+  useState({});  
+
+const [shopImportRunning, setShopImportRunning] =
+  useState(false);
+
+const [shopImportProgress, setShopImportProgress] =
+  useState({
+    total: 0,
+    completed: 0,
+    imported: 0,
+    failed: 0,
+  });
+
+const [shopImportErrors, setShopImportErrors] =
+  useState([]);  
+
+  /*
+   * =======================================================
+   * PRODUKTE IM ONLINESHOP SUCHEN
+   * =======================================================
+   */
+
+  async function searchShopProducts() {
+    if (shopImportSearching) return;
+
+    setShopImportMessage(null);
+    setShopImportProducts([]);
+    setShopImportSelected([]);
+
+    if (!shopImportUrl.trim()) {
+      setShopImportMessage(
+        'Bitte geben Sie die Adresse Ihres Onlineshops ein.'
+      );
+      return;
+    }
+
+    try {
+      const url = new URL(shopImportUrl.trim());
+
+      if (!['https:', 'http:'].includes(url.protocol)) {
+        throw new Error('Ungültiges URL-Protokoll.');
+      }
+    } catch {
+      setShopImportMessage(
+        'Bitte geben Sie eine gültige Shop-URL ein.'
+      );
+      return;
+    }
+
+    try {
+      setShopImportSearching(true);
+
+      const token = await shopify.sessionToken.get();
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/shop-discover`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: shopImportUrl.trim(),
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || 'Die Produktsuche ist fehlgeschlagen.'
+        );
+      }
+
+      const products = Array.isArray(data.products)
+        ? data.products
+        : [];
+
+      setShopImportProducts(products);
+
+      setShopImportMessage(
+        `${products.length} Produktlinks gefunden.` +
+          (data.truncated
+            ? ' Die Suche hat das festgelegte Limit erreicht.'
+            : '')
+      );
+    } catch (error) {
+      setShopImportMessage(
+        error.message || 'Die Produktsuche ist fehlgeschlagen.'
+      );
+    } finally {
+      setShopImportSearching(false);
+    }
+  }
+/*
+ * =======================================================
+ * PRODUKTVORSCHAU FÜR AUTOMATISCHEN SHOP-IMPORT
+ * =======================================================
+ */
+
+async function importSelectedShopProducts() {
+  if (shopImportRunning || shopImportSelected.length === 0) {
+    return;
+  }
+
+  const urls = [...new Set(shopImportSelected)];
+
+    setShopImportRunning(true);
+  setShopImportMessage(null);
+  setShopImportErrors([]);
+  setShopImportProgress({
+    total: urls.length,
+    completed: 0,
+    imported: 0,
+    failed: 0,
+  });
+
+  let imported = 0;
+  let failed = 0;
+  const errors = [];
+
+  try {
+    for (const url of urls) {
+      try {
+        const token = await shopify.sessionToken.get();
+
+        const scrapeResponse = await fetch(
+          `${API_BASE_URL}/api/product-scrape`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ url }),
+          }
+        );
+
+        const scrapeData = await scrapeResponse.json();
+
+        if (
+          !scrapeResponse.ok ||
+          !scrapeData.success ||
+          !scrapeData.product
+        ) {
+          throw new Error(
+            scrapeData.error || 'Produkt konnte nicht ausgelesen werden.'
+          );
+        }
+
+        const removedImages = shopImportRemovedImages[url] || [];
+
+        const product = {
+          ...scrapeData.product,
+          sourceUrl: url,
+          images: Array.isArray(scrapeData.product.images)
+            ? scrapeData.product.images.filter(
+                imageUrl => !removedImages.includes(imageUrl)
+              )
+            : [],
+        };
+
+        const saveResponse = await fetch(`${API_BASE_URL}/api/shop-import`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ product }),
+          }
+        );
+
+        const saveData = await saveResponse.json();
+
+        if (!saveResponse.ok || !saveData.success) {
+          throw new Error(
+            saveData.error || 'Produkt konnte nicht gespeichert werden.'
+          );
+        }
+
+        imported += 1;
+      } catch (error) {
+        failed += 1;
+
+        errors.push({
+          url,
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Unbekannter Importfehler.',
+        });
+      }
+
+      setShopImportProgress({
+        total: urls.length,
+        completed: imported + failed,
+        imported,
+        failed,
+      });
+    }
+
+    setShopImportErrors(errors);
+
+    if (imported > 0) {
+      await loadProducts();
+    }
+
+    setShopImportMessage({
+      type: failed > 0 ? 'warning' : 'success',
+      text: `${imported} Produkte importiert, ${failed} fehlgeschlagen.`,
+    });
+  } catch (error) {
+    setShopImportMessage({
+      type: 'error',
+      text:
+        error instanceof Error
+          ? error.message
+          : 'Der Import konnte nicht abgeschlossen werden.',
+    });
+  } finally {
+    setShopImportRunning(false);
+  }
+}
+
+async function previewShopImportProduct(url) {
+  if (shopImportPreviewLoading) return;
+
+setShopImportPreview(null);
+setShopImportPreviewLoadingUrl(url);
+setShopImportPreviewLoading(true);
+
+  try {
+    const token = await shopify.sessionToken.get();
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/product-scrape`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success || !data.product) {
+      throw new Error(
+        data.error || 'Die Produktvorschau konnte nicht geladen werden.'
+      );
+    }
+
+    setShopImportPreview({
+      url,
+      product: data.product,
+      error: null,
+    });
+  } catch (error) {
+    setShopImportPreview({
+      url,
+      product: null,
+      error:
+        error.message ||
+        'Die Produktvorschau konnte nicht geladen werden.',
+    });
+} finally {
+  setShopImportPreviewLoading(false);
+  setShopImportPreviewLoadingUrl(null);
+}
+}
 
   /*
    * =======================================================
@@ -1637,6 +1942,330 @@ homepageUrl:
           </s-stack>
 
         </s-section>
+
+
+          {/* AUTOMATISCHER SHOP-IMPORT */}
+
+          {['business', 'professional', 'enterprise'].includes(
+            String(packageData.name || '').toLowerCase()
+          ) && (
+            <s-section heading="Automatischer Shop-Import">
+              <s-stack direction="block" gap="base">
+
+                <s-text>
+                  Geben Sie die Adresse Ihres Onlineshops ein.
+                  Marktblatt sucht automatisch nach Ihren
+                  Produktlinks.
+                </s-text>
+
+                <s-text-field
+                  label="Shop-URL"
+                  placeholder="https://www.ihr-shop.de"
+                  type="url"
+                  value={shopImportUrl}
+                  onInput={(event) => {
+                    setShopImportUrl(event.currentTarget.value);
+                  }}
+                />
+
+                <s-button
+                  variant="primary"
+                  onClick={searchShopProducts}
+                  disabled={shopImportSearching}
+                >
+                  {shopImportSearching
+                    ? 'Produkte werden gesucht...'
+                    : 'Produkte suchen'}
+                </s-button>
+
+                                {shopImportMessage && (
+                  <s-text>
+                    {typeof shopImportMessage === 'string'
+                      ? shopImportMessage
+                      : shopImportMessage.text}
+                  </s-text>
+                )}
+
+                {shopImportErrors.length > 0 && (
+                  <s-box
+                    padding="base"
+                    border="base"
+                    borderRadius="base"
+                  >
+                    <s-stack direction="block" gap="base">
+                      <s-text type="strong">
+                        Fehlgeschlagene Produktimporte:
+                        {' '}{shopImportErrors.length}
+                      </s-text>
+
+                      {shopImportErrors.map((error, index) => (
+                        <s-stack
+                          key={`${error.url}-${index}`}
+                          direction="block"
+                          gap="small"
+                        >
+                          <s-text>
+                            Produkt: {error.url}
+                          </s-text>
+
+                          <s-text>
+                            Fehler: {error.message}
+                          </s-text>
+                        </s-stack>
+                      ))}
+                    </s-stack>
+                  </s-box>
+                )}
+
+                
+                  {shopImportProducts.length > 0 && (
+                    <s-stack direction="block" gap="base">
+
+                      <s-text type="strong">
+                        Gefundene Produkte: {shopImportProducts.length}
+                      </s-text>
+
+                      <s-text>
+                        Ausgewählt: {shopImportSelected.length} von maximal{' '}
+                        {packageData.availableProducts} verfügbaren
+                        Produktplätzen
+                      </s-text>
+
+                      <s-checkbox
+                        checked={
+                          shopImportProducts.length > 0 &&
+                          shopImportSelected.length ===
+                            Math.min(
+                              shopImportProducts.length,
+                              packageData.availableProducts
+                            )
+                        }
+                        onChange={(event) => {
+                          if (event.currentTarget.checked) {
+                            setShopImportSelected(
+                              shopImportProducts.slice(
+                                0,
+                                packageData.availableProducts
+                              )
+                            );
+                          } else {
+                            setShopImportSelected([]);
+                          }
+                        }}
+                      >
+                        Alle verfügbaren Produkte auswählen
+                      </s-checkbox>
+
+                      <s-box
+                        border="base solid"
+                        borderRadius="base"
+                        padding="base"
+                      >
+                        <s-stack direction="block" gap="small">
+
+                          {shopImportProducts.map((url, index) => {
+                            const selected =
+                              shopImportSelected.includes(url);
+
+                            const limitReached =
+                              !selected &&
+                              shopImportSelected.length >=
+                                packageData.availableProducts;
+
+                            return (
+  <s-stack key={url} direction="block" gap="small">
+                              <s-checkbox
+                                key={url}
+                                label={`${index + 1}. ${decodeURIComponent(
+  new URL(url).pathname.split('/').filter(Boolean).pop() || url
+).replace(/-/g, ' ')}`}
+                                checked={selected}
+                                disabled={limitReached}
+                                onChange={(event) => {
+                                  if (event.currentTarget.checked) {
+                                    setShopImportSelected((previous) =>
+                                      previous.includes(url) ||
+                                      previous.length >=
+                                        packageData.availableProducts
+                                        ? previous
+                                        : [...previous, url]
+                                    );
+                                  } else {
+                                    setShopImportSelected((previous) =>
+                                      previous.filter(
+                                        (item) => item !== url
+                                      )
+                                    );
+                                  }
+                                  }}
+                                />
+
+<s-button
+  variant="secondary"
+  disabled={
+    shopImportPreviewLoadingUrl === url ||
+    (!shopImportPreviewLoading &&
+      shopImportPreview?.url === url)
+  }
+  onClick={() => previewShopImportProduct(url)}
+>
+  {shopImportPreviewLoadingUrl === url
+    ? 'Vorschau wird geladen...'
+    : 'Vorschau'}
+</s-button>
+
+                                  {shopImportPreview?.url === url && (
+                                    <s-box
+                                      border="base solid"
+                                      borderRadius="base"
+                                      padding="base"
+                                    >
+                                      <s-stack direction="block" gap="base">
+                                        <s-heading>Produktvorschau</s-heading>
+
+                                        {shopImportPreview.error ? (
+                                          <s-text>
+                                            {shopImportPreview.error}
+                                          </s-text>
+                                        ) : (
+                                          <>
+                                            <s-text type="strong">
+                                              {shopImportPreview.product.title}
+                                            </s-text>
+
+{Array.isArray(shopImportPreview.product.images) && (
+  <s-grid
+    gridTemplateColumns="repeat(3, minmax(0, 1fr))"
+    gap="base"
+  >
+    {shopImportPreview.product.images
+      .filter(
+        (imageUrl) =>
+          !(shopImportRemovedImages[url] || []).includes(imageUrl)
+      )
+      .map((imageUrl, imageIndex) => (
+        <s-box
+          key={`${imageIndex}-${imageUrl}`}
+          padding="small"
+          border="base solid"
+          borderRadius="base"
+        >
+          <s-stack direction="block" gap="small">
+            <s-image
+              src={imageUrl}
+              alt={`Produktbild ${imageIndex + 1}`}
+              inlineSize="80px"
+              aspectRatio="1"
+              objectFit="contain"
+            />
+
+            <s-button
+              variant="secondary"
+              onClick={() => {
+                setShopImportRemovedImages((previous) => ({
+                  ...previous,
+                  [url]: [
+                    ...(previous[url] || []),
+                    imageUrl,
+                  ],
+                }));
+              }}
+            >
+              Bild entfernen
+            </s-button>
+          </s-stack>
+        </s-box>
+      ))}
+  </s-grid>
+)}
+
+                                            <s-text>
+                                              Preis: {shopImportPreview.product.price ?? 'Nicht verfügbar'}
+                                            </s-text>
+
+                                            <s-text>
+                                              Artikelnummer: {shopImportPreview.product.sku || 'Nicht vorhanden'}
+                                            </s-text>
+
+                                            {shopImportPreview.product.description && (
+                                              <s-text>
+                                                {shopImportPreview.product.description}
+                                              </s-text>
+                                            )}
+
+                                            {Array.isArray(shopImportPreview.product.variants) &&
+                                              shopImportPreview.product.variants.map(
+                                                (variant, variantIndex) => (
+                                                  <s-text key={variant.id || variantIndex}>
+                                                    {variant.title || `Variante ${variantIndex + 1}`}
+                                                    {' – Art.-Nr.: '}
+                                                    {variant.sku || 'Nicht vorhanden'}
+                                                    {' – Preis: '}
+                                                    {variant.price ?? 'Nicht verfügbar'}
+                                                  </s-text>
+                                                )
+                                              )}
+                                          </>
+                                        )}
+
+                                        <s-button
+                                          variant="secondary"
+                                          onClick={() => setShopImportPreview(null)}
+                                        >
+                                          Vorschau schließen
+                                        </s-button>
+                                      </s-stack>
+                                    </s-box>
+                                  )}
+
+                                </s-stack>
+                                );
+                          })}
+
+                        </s-stack>
+                      </s-box>
+
+                                            <s-text>
+                        {shopImportSelected.length} Produkte für den
+                        Import ausgewählt.
+                      </s-text>
+
+                      {shopImportSelected.length > 0 && (
+                        <s-button
+                          variant="primary"
+                          disabled={shopImportRunning}
+                          onClick={importSelectedShopProducts}
+                        >
+                          {shopImportRunning
+                            ? `Import läuft (${shopImportProgress.completed} von ${shopImportProgress.total})`
+                            : `${shopImportSelected.length} Produkte importieren`}
+                        </s-button>
+                      )}
+
+                      {shopImportRunning && (
+                        <s-text>
+                          Importiert: {shopImportProgress.imported} |
+                          Fehlgeschlagen: {shopImportProgress.failed}
+                        </s-text>
+                      )}
+
+                      {!shopImportRunning &&
+                        shopImportProgress.total > 0 && (
+                          <s-text>
+                            Import abgeschlossen:
+                            {' '}{shopImportProgress.imported} erfolgreich,
+                            {' '}{shopImportProgress.failed} fehlgeschlagen.
+                          </s-text>
+                        )}
+
+
+                    </s-stack>
+                  )}
+
+              </s-stack>
+            </s-section>
+          )}
+
 
         {/* NEUES PRODUKT */}
 
