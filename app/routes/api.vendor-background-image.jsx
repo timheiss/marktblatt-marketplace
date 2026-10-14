@@ -243,14 +243,14 @@ export const action = async ({ request }) => {
     if (
       !metadata.width ||
       !metadata.height ||
-      metadata.width !== metadata.height * 2
+      Math.abs(metadata.width / metadata.height - 3) > 0.03
     ) {
       return cors(
         Response.json(
           {
             success: false,
             error:
-              "Das Hintergrundbild muss das Seitenverhältnis 2:1 haben, z. B. 1600 × 800 Pixel.",
+              "Das Hintergrundbild muss das Seitenverhältnis 3:1 haben (±1 % Toleranz), z. B. 1800 × 600 Pixel.",
           },
           { status: 400 }
         )
