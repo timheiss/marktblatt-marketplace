@@ -196,7 +196,25 @@ async function importSelectedShopProducts() {
     return;
   }
 
-  const urls = [...new Set(shopImportSelected)];
+  const importedUrls = new Set(
+    marketplaceProducts
+      .filter((product) => product.status !== 'deleted')
+      .map((product) => product.sourceUrl)
+      .filter(Boolean)
+  );
+
+  const urls = [...new Set(shopImportSelected)].filter(
+    (url) => !importedUrls.has(url)
+  );
+
+  if (urls.length === 0) {
+    setShopImportSelected([]);
+    setShopImportMessage({
+      type: 'warning',
+      text: 'Alle ausgewählten Produkte wurden bereits importiert.',
+    });
+    return;
+  }
 
     setShopImportRunning(true);
   setShopImportMessage(null);
@@ -292,16 +310,24 @@ async function importSelectedShopProducts() {
       });
     }
 
-    setShopImportErrors(errors);
+setShopImportErrors(errors);
 
-    if (imported > 0) {
-      await loadProducts();
-    }
+if (imported > 0) {
+  await loadProducts();
+}
 
-    setShopImportMessage({
-      type: failed > 0 ? 'warning' : 'success',
-      text: `${imported} Produkte importiert, ${failed} fehlgeschlagen.`,
-    });
+// Erfolgreich importierte Produkte aus der Auswahl entfernen.
+// Fehlgeschlagene Produkte bleiben für einen erneuten Versuch auswählbar.
+const failedUrls = new Set(errors.map((error) => error.url));
+
+setShopImportSelected(
+  urls.filter((url) => failedUrls.has(url))
+);
+
+setShopImportMessage({
+  type: failed > 0 ? 'warning' : 'success',
+  text: `${imported} Produkte importiert, ${failed} fehlgeschlagen.`,
+});
   } catch (error) {
     setShopImportMessage({
       type: 'error',
@@ -398,48 +424,6 @@ const [changingCompareAtPrices, setChangingCompareAtPrices] =
 const [bulkStatusAction, setBulkStatusAction] =
   useState(null);
 
-  /*
-   * =======================================================
-   * ANBIETERINFORMATIONEN
-   * =======================================================
-   */
-
-  const [vendorProfile, setVendorProfile] =
-    useState({
-      companyDescription: '',
-      backgroundImageId: null,
-      discountCode: '',
-      discountPercent: '',
-discountMinimumOrderValue: '',
-deliveryTimeInfo: '',
-homepageUrl: '',
-      imprintUrl: '',
-      withdrawalUrl: '',
-      facebookUrl: '',
-      instagramUrl: '',
-      tiktokUrl: '',
-      youtubeUrl: '',
-    });
-
-  const [loadingVendorProfile, setLoadingVendorProfile] =
-    useState(true);
-
-  const [savingVendorProfile, setSavingVendorProfile] =
-    useState(false);
-
-  /*
-   * =======================================================
-   * ANBIETER-HINTERGRUNDBILD
-   * =======================================================
-   */
-
-  const [vendorBackgroundImage, setVendorBackgroundImage] =
-    useState(null);
-
-  const [
-    uploadingVendorBackgroundImage,
-    setUploadingVendorBackgroundImage,
-  ] = useState(false);
 
   /*
    * =======================================================
@@ -447,105 +431,10 @@ homepageUrl: '',
    * =======================================================
    */
 
-  useEffect(() => {
-    loadProducts();
-    loadVendorProfile();
-  }, []);
+useEffect(() => {
+  loadProducts();
+}, []);
 
-  /*
-   * =======================================================
-   * ANBIETERINFORMATIONEN LADEN
-   * =======================================================
-   */
-
-  async function loadVendorProfile() {
-    try {
-      setLoadingVendorProfile(true);
-
-      const token =
-        await shopify.sessionToken.get();
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/vendor-profile`,
-        {
-          method: 'GET',
-
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const data =
-        await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.error ||
-            'Anbieterinformationen konnten nicht geladen werden.'
-        );
-      }
-
-      const profile =
-        data.profile || {};
-
-      setVendorProfile({
-        companyDescription:
-          profile.companyDescription || '',
-
-        backgroundImageId:
-          profile.backgroundImageId || null,
-
-        discountCode:
-          profile.discountCode || '',
-
-        discountPercent:
-          profile.discountPercent ?? '',
-
-discountMinimumOrderValue:
-  profile.discountMinimumOrderValue || '',
-
-deliveryTimeInfo:
-  profile.deliveryTimeInfo || '',
-
-homepageUrl:
-  profile.homepageUrl || '',
-
-        imprintUrl:
-          profile.imprintUrl || '',
-
-        withdrawalUrl:
-          profile.withdrawalUrl || '',
-
-        facebookUrl:
-          profile.facebookUrl || '',
-
-        instagramUrl:
-          profile.instagramUrl || '',
-
-        tiktokUrl:
-          profile.tiktokUrl || '',
-
-        youtubeUrl:
-          profile.youtubeUrl || '',
-      });
-
-    } catch (err) {
-      console.error(
-        'VENDOR PROFILE LOAD ERROR:',
-        err
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Anbieterinformationen konnten nicht geladen werden.'
-      );
-
-    } finally {
-      setLoadingVendorProfile(false);
-    }
-  }
 
   /*
    * =======================================================
@@ -1316,234 +1205,6 @@ async function toggleProductStatus(product) {
 
   /*
    * =======================================================
-   * ANBIETER-HINTERGRUNDBILD HOCHLADEN
-   * =======================================================
-   */
-
-  async function uploadVendorBackgroundImage() {
-    try {
-      setUploadingVendorBackgroundImage(true);
-      setError(null);
-      setSaveMessage(null);
-
-      if (!vendorBackgroundImage) {
-        throw new Error(
-          'Bitte wählen Sie zuerst ein Hintergrundbild aus.'
-        );
-      }
-
-      const token =
-        await shopify.sessionToken.get();
-
-      const formData =
-        new FormData();
-
-      formData.append(
-        'image',
-        vendorBackgroundImage
-      );
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/vendor-background-image`,
-        {
-          method: 'POST',
-
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-
-          body: formData,
-        }
-      );
-
-      const data =
-        await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.error ||
-            'Das Hintergrundbild konnte nicht hochgeladen werden.'
-        );
-      }
-
-      setVendorProfile(
-        (current) => ({
-          ...current,
-
-          backgroundImageId:
-            data.backgroundImageId ??
-            current.backgroundImageId,
-        })
-      );
-
-      setVendorBackgroundImage(null);
-
-      setSaveMessage(
-        'Hintergrundbild wurde erfolgreich gespeichert.'
-      );
-
-    } catch (err) {
-      console.error(
-        'VENDOR BACKGROUND IMAGE UPLOAD ERROR:',
-        err
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Das Hintergrundbild konnte nicht hochgeladen werden.'
-      );
-
-    } finally {
-      setUploadingVendorBackgroundImage(false);
-    }
-  }
-
-  /*
-   * =======================================================
-   * ANBIETERINFORMATIONEN SPEICHERN
-   * =======================================================
-   */
-
-async function saveVendorProfile() {
-  try {
-    setError(null);
-    setSaveMessage(null);
-
-    /*
-     * =====================================================
-     * LIEFERZEIT IST PFLICHT
-     * =====================================================
-     */
-
-    if (
-      !vendorProfile.deliveryTimeInfo ||
-      !String(
-        vendorProfile.deliveryTimeInfo
-      ).trim()
-    ) {
-      setError(
-        'Bitte wählen Sie eine Lieferzeit aus.'
-      );
-
-      return;
-    }
-
-    setSavingVendorProfile(true);
-
-    const token =
-      await shopify.sessionToken.get();
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/vendor-profile`,
-        {
-          method: 'POST',
-
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-
-          body: JSON.stringify({
-            profile: {
-              companyDescription:
-                vendorProfile.companyDescription,
-
-              discountCode:
-                vendorProfile.discountCode,
-
-              discountPercent:
-                vendorProfile.discountPercent,
-
-              discountMinimumOrderValue:
-                vendorProfile.discountMinimumOrderValue,
-
-deliveryTimeInfo:
-  vendorProfile.deliveryTimeInfo,
-            },
-          }),
-        }
-      );
-
-      const data =
-        await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.error ||
-            'Anbieterinformationen konnten nicht gespeichert werden.'
-        );
-      }
-
-      const profile =
-        data.profile || {};
-
-      setVendorProfile((current) => ({
-        ...current,
-
-        companyDescription:
-          profile.companyDescription || '',
-
-        backgroundImageId:
-          profile.backgroundImageId || null,
-
-        discountCode:
-          profile.discountCode || '',
-
-        discountPercent:
-          profile.discountPercent ?? '',
-
-discountMinimumOrderValue:
-  profile.discountMinimumOrderValue || '',
-
-deliveryTimeInfo:
-  profile.deliveryTimeInfo || '',
-
-homepageUrl:
-  profile.homepageUrl || '',
-
-        imprintUrl:
-          profile.imprintUrl || '',
-
-        withdrawalUrl:
-          profile.withdrawalUrl || '',
-
-        facebookUrl:
-          profile.facebookUrl || '',
-
-        instagramUrl:
-          profile.instagramUrl || '',
-
-        tiktokUrl:
-          profile.tiktokUrl || '',
-
-        youtubeUrl:
-          profile.youtubeUrl || '',
-      }));
-
-      setSaveMessage(
-        'Anbieterinformationen wurden gespeichert.'
-      );
-
-    } catch (err) {
-      console.error(
-        'VENDOR PROFILE SAVE ERROR:',
-        err
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Anbieterinformationen konnten nicht gespeichert werden.'
-      );
-
-    } finally {
-      setSavingVendorProfile(false);
-    }
-  }
-
-  /*
-   * =======================================================
    * OBERFLÃ„CHE
    * =======================================================
    */
@@ -1682,268 +1343,6 @@ homepageUrl:
 
 </s-section>
 
-        {/* ANBIETERINFORMATIONEN */}
-
-        <s-section heading="Anbieterinformationen">
-
-          <s-stack
-            direction="block"
-            gap="base"
-          >
-
-            <s-text>
-              Diese Angaben gelten für alle Ihre Produkte
-              auf Marktblatt.
-            </s-text>
-
-            {loadingVendorProfile ? (
-              <s-text>
-                Anbieterinformationen werden geladen...
-              </s-text>
-            ) : (
-              <>
-
-                <s-text-field
-                  label="Informationen über den Anbieter"
-                  value={
-                    vendorProfile.companyDescription
-                  }
-                  onInput={(event) => {
-                    setVendorProfile(
-                      (current) => ({
-                        ...current,
-                        companyDescription:
-                          event.currentTarget.value,
-                      })
-                    );
-                  }}
-                />
-
-                <s-text>
-                  Beschreiben Sie Ihr Unternehmen. Diese Informationen können auf
-                  Ihren Produktseiten angezeigt werden.
-                </s-text>
-
-                <s-box paddingBlockStart="base">
-                  <s-text type="strong">
-                    Hintergrundbild für „Über den Anbieter“
-                  </s-text>
-                </s-box>
-
-                <s-text>
-                  Laden Sie ein Hintergrundbild für den Bereich
-                  „Über den Anbieter“ auf Ihren Produktseiten hoch.
-                  Das Bild gilt für alle Ihre Produkte auf Marktblatt.
-                </s-text>
-
-               <s-drop-zone
-  label="Hintergrundbild auswählen"
-  accessibilityLabel="Hintergrundbild für Über den Anbieter auswählen"
-  accept="image/jpeg,image/png,image/webp"
-  disabled={uploadingVendorBackgroundImage}
-  onChange={(event) => {
-    const file =
-      event.currentTarget.files?.[0] ??
-      null;
-
-    if (!file) {
-      setVendorBackgroundImage(null);
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      setVendorBackgroundImage(null);
-
-      setError(
-        'Das Bild darf maximal 10 MB groß sein.'
-      );
-
-      return;
-    }
-
-    setError(null);
-    setVendorBackgroundImage(file);
-  }}
-  onDropRejected={() => {
-    setVendorBackgroundImage(null);
-
-    setError(
-      'Bitte verwenden Sie ausschließlich ein JPG-, PNG- oder WebP-Bild.'
-    );
-  }}
-/>
-
-                <s-text>
-                  Erlaubt sind JPG, PNG und WebP mit maximal 10 MB.
-                </s-text>
-
-                {vendorBackgroundImage && (
-                  <s-text>
-                    Ausgewählt: {vendorBackgroundImage.name}
-                  </s-text>
-                )}
-
-                {vendorProfile.backgroundImageId && (
-                  <s-text>
-                    ✓ Ein Hintergrundbild ist bereits hinterlegt.
-                  </s-text>
-                )}
-
-                <s-button
-                  onClick={uploadVendorBackgroundImage}
-                  disabled={
-                    uploadingVendorBackgroundImage ||
-                    !vendorBackgroundImage
-                  }
-                >
-                  {uploadingVendorBackgroundImage
-                    ? 'Bild wird hochgeladen...'
-                    : vendorProfile.backgroundImageId
-                      ? 'Hintergrundbild ersetzen'
-                      : 'Hintergrundbild hochladen'}
-                </s-button>
-
-                <s-box paddingBlockStart="base">
-                  <s-text type="strong">
-                    Rabatt für Marktblatt-Kunden
-                  </s-text>
-                </s-box>
-
-                <s-text-field
-                  label="Rabattcode"
-                  value={
-                    vendorProfile.discountCode
-                  }
-                  onInput={(event) => {
-                    setVendorProfile(
-                      (current) => ({
-                        ...current,
-                        discountCode:
-                          event.currentTarget.value,
-                      })
-                    );
-                  }}
-                />
-
-                <s-text>
-                  Der Rabattcode gilt für alle Produkte,
-                  die Sie auf Marktblatt anbieten. Legen
-                  Sie denselben Rabattcode deshalb auch
-                  in Ihrem eigenen Onlineshop an.
-                </s-text>
-
-                <s-text-field
-                  label="Rabatt in %"
-                  type="number"
-                  value={
-                    vendorProfile.discountPercent
-                  }
-                  onInput={(event) => {
-                    setVendorProfile(
-                      (current) => ({
-                        ...current,
-                        discountPercent:
-                          event.currentTarget.value,
-                      })
-                    );
-                  }}
-                />
-
-                <s-text-field
-                  label="Mindestbestellwert für Rabattcode"
-                  type="number"
-                  value={
-                    vendorProfile
-                      .discountMinimumOrderValue
-                  }
-                  onInput={(event) => {
-                    setVendorProfile(
-                      (current) => ({
-                        ...current,
-                        discountMinimumOrderValue:
-                          event.currentTarget.value,
-                      })
-                    );
-                  }}
-                />
-
-                <s-text>
-                  Geben Sie den Mindestbestellwert an, ab
-                  dem der Rabattcode in Ihrem Onlineshop
-                  verwendet werden kann. Gibt es keinen
-                  Mindestbestellwert, lassen Sie das Feld
-                  leer.
-                </s-text>
-
-<s-select
-  label="Lieferzeit"
-  value={vendorProfile.deliveryTimeInfo}
-  onChange={(event) => {
-    setVendorProfile(
-      (current) => ({
-        ...current,
-        deliveryTimeInfo:
-          event.currentTarget.value,
-      })
-    );
-  }}
->
-  <s-option value="">
-    Bitte auswählen
-  </s-option>
-
-  <s-option value="1–2 Werktage">
-    1–2 Werktage
-  </s-option>
-
-  <s-option value="2–3 Werktage">
-    2–3 Werktage
-  </s-option>
-
-  <s-option value="3–5 Werktage">
-    3–5 Werktage
-  </s-option>
-
-  <s-option value="5–7 Werktage">
-    5–7 Werktage
-  </s-option>
-
-  <s-option value="1–2 Wochen">
-    1–2 Wochen
-  </s-option>
-
-  <s-option value="2–4 Wochen">
-    2–4 Wochen
-  </s-option>
-
-  <s-option value="Auf Anfrage">
-    Auf Anfrage
-  </s-option>
-</s-select>
-
-<s-text>
-  Wählen Sie die allgemeine Lieferzeit für Ihre Produkte.
-  Diese Angabe gilt für alle Ihre Produkte auf Marktblatt.
-</s-text>
-
-                <s-button
-                  variant="primary"
-                  onClick={saveVendorProfile}
-                  disabled={savingVendorProfile}
-                >
-                  {savingVendorProfile
-                    ? 'Wird gespeichert...'
-                    : 'Anbieterinformationen speichern'}
-                </s-button>
-
-              </>
-            )}
-
-          </s-stack>
-
-        </s-section>
-
-
           {/* AUTOMATISCHER SHOP-IMPORT */}
 
           {['business', 'professional', 'enterprise'].includes(
@@ -2064,6 +1463,11 @@ homepageUrl:
                         <s-stack direction="block" gap="small">
 
                           {shopImportProducts.map((url, index) => {
+const alreadyImported = marketplaceProducts.some(
+  (product) =>
+    product.sourceUrl === url &&
+    product.status !== 'deleted'
+);
                             const selected =
                               shopImportSelected.includes(url);
 
@@ -2074,13 +1478,13 @@ homepageUrl:
 
                             return (
   <s-stack key={url} direction="block" gap="small">
-                              <s-checkbox
-                                key={url}
-                                label={`${index + 1}. ${decodeURIComponent(
-  new URL(url).pathname.split('/').filter(Boolean).pop() || url
-).replace(/-/g, ' ')}`}
-                                checked={selected}
-                                disabled={limitReached}
+<s-checkbox
+  key={url}
+label={`${index + 1}. ${decodeURIComponent(
+    new URL(url).pathname.split('/').filter(Boolean).pop() || url
+  ).replace(/-/g, ' ')}`}
+  checked={selected && !alreadyImported}
+  disabled={alreadyImported || limitReached}
                                 onChange={(event) => {
                                   if (event.currentTarget.checked) {
                                     setShopImportSelected((previous) =>
@@ -2099,6 +1503,11 @@ homepageUrl:
                                   }
                                   }}
                                 />
+{alreadyImported && (
+  <s-text color="success">
+    ✓ Bereits importiert
+  </s-text>
+)}
 
 <s-button
   variant="secondary"

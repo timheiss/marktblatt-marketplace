@@ -38,7 +38,7 @@ useEffect(() => {
 
   async function checkSession() {
     try {
-      const token = await shopify.sessionToken.get();
+      const token = await shopify.auth.idToken();
 
       if (!token) {
         throw new Error(
@@ -108,7 +108,7 @@ async function downloadDocument() {
   setDocumentDownloadUrl('');
 
     try {
-      const token = await shopify.sessionToken.get();
+      const token = await shopify.auth.idToken();
 
       if (!token) {
         throw new Error('Keine gültige Shopify-Admin-Sitzung.');
@@ -171,7 +171,7 @@ async function reviewVendor(decision) {
   setReviewSuccess('');
 
   try {
-    const token = await shopify.sessionToken.get();
+    const token = await shopify.auth.idToken();
 
     if (!token) {
       throw new Error('Keine gültige Shopify-Admin-Sitzung.');
