@@ -1,4 +1,5 @@
 
+
 import { useState } from "react";
 import { useLoaderData, useFetcher } from "react-router";
 import { authenticate } from "../shopify.server";
@@ -14,21 +15,51 @@ const PACKAGES = [
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
 
-  const budgets = await prisma.adsPackageBudget.findMany();
+  const [budgets, subscriptions] = await Promise.all([
+    prisma.adsPackageBudget.findMany(),
+    prisma.subscription.findMany({
+      where: {
+        status: "active",
+      },
+      select: {
+        package: true,
+      },
+    }),
+  ]);
+
+  const packages = PACKAGES.map((pkg) => {
+    const saved = budgets.find(
+      (budget) =>
+        budget.package.toLowerCase() === pkg.name.toLowerCase()
+    );
+
+    const activeVendors = subscriptions.filter(
+      (subscription) =>
+        subscription.package?.toLowerCase() ===
+        pkg.name.toLowerCase()
+    ).length;
+
+    const monthlyBudgetCents = saved?.monthlyBudgetCents ?? 0;
+
+    return {
+      name: pkg.name,
+      products: pkg.products,
+      monthlyBudgetCents,
+      activeVendors,
+      totalBudgetCents: activeVendors * monthlyBudgetCents,
+    };
+  });
 
   return {
-    packages: PACKAGES.map((pkg) => {
-      const saved = budgets.find(
-        (budget) =>
-          budget.package.toLowerCase() === pkg.name.toLowerCase()
-      );
-
-      return {
-        name: pkg.name,
-        products: pkg.products,
-        monthlyBudgetCents: saved?.monthlyBudgetCents ?? 0,
-      };
-    }),
+    packages,
+    totalVendors: packages.reduce(
+      (sum, pkg) => sum + pkg.activeVendors,
+      0
+    ),
+    totalBudgetCents: packages.reduce(
+      (sum, pkg) => sum + pkg.totalBudgetCents,
+      0
+    ),
   };
 };
 
@@ -41,8 +72,10 @@ export const action = async ({ request }) => {
   for (const pkg of PACKAGES) {
     const raw = formData.get(pkg.name);
 
-    if (typeof raw !== "string" ||
-        !/^\d+(?:[.,]\d{1,2})?$/.test(raw.trim())) {
+    if (
+      typeof raw !== "string" ||
+      !/^\d+(?:[.,]\d{1,2})?$/.test(raw.trim())
+    ) {
       return {
         success: false,
         message: `Ungültiges Budget für ${pkg.name}.`,
@@ -51,10 +84,16 @@ export const action = async ({ request }) => {
 
     const normalized = raw.trim().replace(",", ".");
     const [euros, cents = ""] = normalized.split(".");
-    const amount = Number(euros) * 100 +
+
+    const amount =
+      Number(euros) * 100 +
       Number(cents.padEnd(2, "0"));
 
-    if (!Number.isSafeInteger(amount) || amount < 0) {
+    if (
+      !Number.isSafeInteger(amount) ||
+      amount < 0 ||
+      amount > 2147483647
+    ) {
       return {
         success: false,
         message: `Ungültiges Budget für ${pkg.name}.`,
@@ -86,7 +125,9 @@ export const action = async ({ request }) => {
 };
 
 export default function AdsManager() {
-  const { packages } = useLoaderData();
+  const { packages, totalVendors, totalBudgetCents } =
+    useLoaderData();
+
   const fetcher = useFetcher();
 
   const [budgets, setBudgets] = useState(() =>
@@ -101,6 +142,12 @@ export default function AdsManager() {
   );
 
   const saving = fetcher.state !== "idle";
+
+  const formatEuro = (cents) =>
+    (cents / 100).toLocaleString("de-DE", {
+      style: "currency",
+      currency: "EUR",
+    });
 
   const saveBudgets = () => {
     const formData = new FormData();
@@ -130,7 +177,9 @@ export default function AdsManager() {
           <s-table-header-row>
             <s-table-header>Paket</s-table-header>
             <s-table-header>Produktlimit</s-table-header>
-            <s-table-header>Budget pro Anbieter (€)</s-table-header>
+            <s-table-header>
+              Budget pro Anbieter (€)
+            </s-table-header>
           </s-table-header-row>
 
           <s-table-body>
@@ -143,14 +192,15 @@ export default function AdsManager() {
                     label={`Monatsbudget ${pkg.name}`}
                     label-accessibility-visibility="hidden"
                     value={budgets[pkg.name]}
-onInput={(event) => {
-  const newValue = event.currentTarget.value;
+                    onInput={(event) => {
+                      const newValue =
+                        event.currentTarget.value;
 
-  setBudgets((previous) => ({
-    ...previous,
-    [pkg.name]: newValue,
-  }));
-}}
+                      setBudgets((previous) => ({
+                        ...previous,
+                        [pkg.name]: newValue,
+                      }));
+                    }}
                   />
                 </s-table-cell>
               </s-table-row>
@@ -164,17 +214,83 @@ onInput={(event) => {
             disabled={saving}
             onClick={saveBudgets}
           >
-            {saving ? "Speichert..." : "Budgets speichern"}
+            {saving
+              ? "Speichert..."
+              : "Budgets speichern"}
           </s-button>
         </s-box>
 
         {fetcher.data?.message && (
           <s-banner
-            tone={fetcher.data.success ? "success" : "critical"}
+            tone={
+              fetcher.data.success
+                ? "success"
+                : "critical"
+            }
           >
             {fetcher.data.message}
           </s-banner>
         )}
+      </s-section>
+
+      <s-section heading="Automatische Budgetübersicht">
+        <s-paragraph>
+          Die Berechnung basiert auf den aktiven
+          Marktblatt-Abonnements und den gespeicherten
+          monatlichen Paketbudgets.
+        </s-paragraph>
+
+        <s-table>
+          <s-table-header-row>
+            <s-table-header>Paket</s-table-header>
+            <s-table-header>Aktive Anbieter</s-table-header>
+            <s-table-header>
+              Budget je Anbieter
+            </s-table-header>
+            <s-table-header>
+              Monatsbudget gesamt
+            </s-table-header>
+          </s-table-header-row>
+
+          <s-table-body>
+            {packages.map((pkg) => (
+              <s-table-row key={pkg.name}>
+                <s-table-cell>{pkg.name}</s-table-cell>
+                <s-table-cell>
+                  {pkg.activeVendors}
+                </s-table-cell>
+                <s-table-cell>
+                  {formatEuro(pkg.monthlyBudgetCents)}
+                </s-table-cell>
+                <s-table-cell>
+                  {formatEuro(pkg.totalBudgetCents)}
+                </s-table-cell>
+              </s-table-row>
+            ))}
+
+            <s-table-row>
+              <s-table-cell>
+                <s-text type="strong">Gesamt</s-text>
+              </s-table-cell>
+              <s-table-cell>
+                <s-text type="strong">
+                  {totalVendors}
+                </s-text>
+              </s-table-cell>
+              <s-table-cell>–</s-table-cell>
+              <s-table-cell>
+                <s-text type="strong">
+                  {formatEuro(totalBudgetCents)}
+                </s-text>
+              </s-table-cell>
+            </s-table-row>
+          </s-table-body>
+        </s-table>
+
+        <s-paragraph>
+          Die Werte zeigen das geplante Werbebudget,
+          nicht die tatsächlichen Google Ads Ausgaben.
+        </s-paragraph>
       </s-section>
 
       <s-section heading="Google Ads Verbindung">
