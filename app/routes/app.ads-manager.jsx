@@ -143,12 +143,14 @@ export default function AdsManager() {
                     label={`Monatsbudget ${pkg.name}`}
                     label-accessibility-visibility="hidden"
                     value={budgets[pkg.name]}
-                    onInput={(event) =>
-                      setBudgets((previous) => ({
-                        ...previous,
-                        [pkg.name]: event.currentTarget.value,
-                      }))
-                    }
+onInput={(event) => {
+  const newValue = event.currentTarget.value;
+
+  setBudgets((previous) => ({
+    ...previous,
+    [pkg.name]: newValue,
+  }));
+}}
                   />
                 </s-table-cell>
               </s-table-row>
