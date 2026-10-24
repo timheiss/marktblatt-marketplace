@@ -15,17 +15,59 @@ const PACKAGES = [
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
 
-  const [budgets, subscriptions] = await Promise.all([
+
+const [budgets, subscriptions, verifiedProfiles, activeProducts] =
+  await Promise.all([
     prisma.adsPackageBudget.findMany(),
+
     prisma.subscription.findMany({
       where: {
         status: "active",
       },
       select: {
+        customerId: true,
         package: true,
       },
     }),
+
+    prisma.vendorProfile.findMany({
+      where: {
+        verificationStatus: "verified",
+      },
+      select: {
+        customerId: true,
+      },
+    }),
+
+    prisma.marketplaceProduct.findMany({
+      where: {
+        status: "active",
+        adminLocked: false,
+        shopifyProductId: {
+          not: null,
+        },
+      },
+      select: {
+        customerId: true,
+      },
+      distinct: ["customerId"],
+    }),
   ]);
+
+const verifiedCustomerIds = new Set(
+  verifiedProfiles.map((profile) => profile.customerId)
+);
+
+const activeProductCustomerIds = new Set(
+  activeProducts.map((product) => product.customerId)
+);
+
+const eligibleSubscriptions = subscriptions.filter(
+  (subscription) =>
+    verifiedCustomerIds.has(subscription.customerId) &&
+    activeProductCustomerIds.has(subscription.customerId)
+);
+
 
   const packages = PACKAGES.map((pkg) => {
     const saved = budgets.find(
@@ -39,16 +81,25 @@ export const loader = async ({ request }) => {
         pkg.name.toLowerCase()
     ).length;
 
+
+const eligibleVendors = eligibleSubscriptions.filter(
+  (subscription) =>
+    subscription.package?.toLowerCase() ===
+    pkg.name.toLowerCase()
+).length;
+
+
     const monthlyBudgetCents = saved?.monthlyBudgetCents ?? 0;
 
-    return {
-      name: pkg.name,
-      products: pkg.products,
-      monthlyBudgetCents,
-      activeVendors,
-      totalBudgetCents: activeVendors * monthlyBudgetCents,
-    };
-  });
+return {
+  name: pkg.name,
+  products: pkg.products,
+  monthlyBudgetCents,
+  activeVendors,
+  eligibleVendors,
+  totalBudgetCents: activeVendors * monthlyBudgetCents,
+  eligibleBudgetCents: eligibleVendors * monthlyBudgetCents,
+};  });
 
   return {
     packages,
@@ -292,6 +343,67 @@ export default function AdsManager() {
           nicht die tatsächlichen Google Ads Ausgaben.
         </s-paragraph>
       </s-section>
+
+
+<s-section heading="Werbeberechtigte Anbieter">
+  <s-paragraph>
+    Diese Vorschau berücksichtigt aktive Abonnements,
+    verifizierte Anbieter und mindestens ein aktives,
+    nicht gesperrtes Produkt mit Shopify-Produkt-ID.
+  </s-paragraph>
+
+  <s-table>
+    <s-table-header-row>
+      <s-table-header>Paket</s-table-header>
+      <s-table-header>Aktive Anbieter</s-table-header>
+      <s-table-header>Werbeberechtigt</s-table-header>
+      <s-table-header>Werbebudget</s-table-header>
+    </s-table-header-row>
+
+    <s-table-body>
+      {packages.map((pkg) => (
+        <s-table-row key={pkg.name}>
+          <s-table-cell>{pkg.name}</s-table-cell>
+          <s-table-cell>{pkg.activeVendors}</s-table-cell>
+          <s-table-cell>{pkg.eligibleVendors}</s-table-cell>
+          <s-table-cell>
+            {formatEuro(pkg.eligibleBudgetCents)}
+          </s-table-cell>
+        </s-table-row>
+      ))}
+
+      <s-table-row>
+        <s-table-cell>
+          <s-text type="strong">Gesamt</s-text>
+        </s-table-cell>
+        <s-table-cell>{totalVendors}</s-table-cell>
+        <s-table-cell>
+          {packages.reduce(
+            (sum, pkg) => sum + pkg.eligibleVendors,
+            0
+          )}
+        </s-table-cell>
+        <s-table-cell>
+          {formatEuro(
+            packages.reduce(
+              (sum, pkg) => sum + pkg.eligibleBudgetCents,
+              0
+            )
+          )}
+        </s-table-cell>
+      </s-table-row>
+    </s-table-body>
+  </s-table>
+
+  <s-paragraph>
+    Dies ist eine vorläufige Budgetplanung.
+    Die tatsächliche Shopify-Onlineshop-Veröffentlichung
+    wird vor der Werbeschaltung zusätzlich geprüft.
+    Es werden noch keine Budgets zugewiesen oder
+    Google Ads Kampagnen gestartet.
+  </s-paragraph>
+</s-section>
+
 
       <s-section heading="Google Ads Verbindung">
         <s-paragraph>
