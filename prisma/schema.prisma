@@ -360,3 +360,56 @@ model VerificationDownloadToken {
   @@index([expiresAt])
   @@index([customerId])
 }
+
+/**
+ * =========================================================
+ * MARKTBLATT KI ADS MANAGER
+ * Paketabhängige Werbebudgets
+ * =========================================================
+ */
+
+model AdsPackageBudget {
+  id String @id @default(cuid())
+
+  // Starter, Business, Professional, Enterprise
+  package String @unique
+
+  // Monatlicher Werbeanteil je Anbieter in Cent
+  monthlyBudgetCents Int @default(0)
+
+  // Verwaltung
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/**
+ * =========================================================
+ * WERBEBUDGET PRO ANBIETER UND MONAT
+ * =========================================================
+ */
+
+model AdsVendorAllocation {
+  id String @id @default(cuid())
+
+  // Shopify-Kunde / Anbieter
+  customerId String
+
+  // Abrechnungsmonat, z. B. 2026-11
+  month String
+
+  // Paket zum Zeitpunkt der Budgetzuweisung
+  package String
+
+  // Zugewiesenes Budget in Cent
+  allocatedBudgetCents Int @default(0)
+
+  // Tatsächlich verbrauchtes Budget in Cent
+  spentBudgetCents Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Ein Datensatz pro Anbieter und Monat
+  @@unique([customerId, month])
+  @@index([month])
+}
