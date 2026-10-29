@@ -34,9 +34,9 @@ export async function ensureMonthlyPackageBudgets(
 
   return prisma.$transaction(async (tx) => {
     // Dieselbe Sperre wie bei der Budget-Speicherung.
-    await tx.$queryRaw`
-      SELECT pg_advisory_xact_lock(824105, 1)
-    `;
+await tx.$queryRaw`
+  SELECT pg_advisory_xact_lock(824105, 1)::text
+`;
 
     const [existing, previous, defaults] =
       await Promise.all([

@@ -484,9 +484,9 @@ if (intent !== null && intent !== "save-budgets") {
   try {
     await prisma.$transaction(async (tx) => {
       // Sperre für konkurrierende Budget-Speichervorgänge.
-      await tx.$queryRaw`
-        SELECT pg_advisory_xact_lock(824105, 1)
-      `;
+await tx.$queryRaw`
+  SELECT pg_advisory_xact_lock(824105, 1)::text
+`;
 
       const databaseTime = await tx.$queryRaw`
         SELECT to_char(
