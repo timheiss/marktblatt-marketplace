@@ -413,3 +413,29 @@ model AdsVendorAllocation {
   @@unique([customerId, month])
   @@index([month])
 }
+
+
+/**
+ * =========================================================
+ * FESTES PAKETBUDGET PRO ABRECHNUNGSMONAT
+ * =========================================================
+ */
+model AdsMonthlyPackageBudget {
+  id String @id @default(cuid())
+
+  // Abrechnungsmonat, z. B. 2026-11
+  month String
+
+  // Starter, Business, Professional, Enterprise
+  package String
+
+  // Festgelegtes Monatsbudget je Anbieter in Cent
+  monthlyBudgetCents Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([month, package])
+  @@index([month])
+}
+

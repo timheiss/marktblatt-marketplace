@@ -1,9 +1,10 @@
 
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLoaderData, useFetcher } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { ensureMonthlyPackageBudgets } from "../services/ads-monthly-budget.server";
 
 const PACKAGES = [
   { name: "Starter", products: 10 },
@@ -12,11 +13,63 @@ const PACKAGES = [
   { name: "Enterprise", products: 600 },
 ];
 
+
+
+function getBerlinMonthInfo(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const getPart = (type) =>
+    Number(parts.find((part) => part.type === type)?.value);
+
+  const year = getPart("year");
+  const month = getPart("month");
+  const day = getPart("day");
+
+  const daysInMonth = new Date(
+    Date.UTC(year, month, 0)
+  ).getUTCDate();
+
+  return {
+    month: `${year}-${String(month).padStart(2, "0")}`,
+    day,
+    daysInMonth,
+  };
+}
+
+function calculateProratedBudget(
+  monthlyBudgetCents,
+  date = new Date()
+) {
+  const { day, daysInMonth } = getBerlinMonthInfo(date);
+
+  const remainingDays = daysInMonth - day + 1;
+
+  return Math.round(
+    (monthlyBudgetCents * remainingDays) / daysInMonth
+  );
+}
+
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
 
+  // Gültige Monatsbudgets automatisch bereitstellen
+  await ensureMonthlyPackageBudgets();
 
-const [budgets, subscriptions, verifiedProfiles, activeProducts] =
+
+const [
+  budgets,
+  subscriptions,
+  verifiedProfiles,
+  activeProducts,
+  monthlyAllocations,
+  currentMonthlyBudgets,
+  nextMonthlyBudgets,
+] =
   await Promise.all([
     prisma.adsPackageBudget.findMany(),
 
@@ -52,6 +105,41 @@ const [budgets, subscriptions, verifiedProfiles, activeProducts] =
       },
       distinct: ["customerId"],
     }),
+
+    prisma.adsVendorAllocation.findMany({
+      where: {
+        month: getBerlinMonthInfo().month,
+      },
+      select: {
+        customerId: true,
+        package: true,
+        allocatedBudgetCents: true,
+        spentBudgetCents: true,
+      },
+    }),
+
+    prisma.adsMonthlyPackageBudget.findMany({
+      where: {
+        month: getBerlinMonthInfo().month,
+      },
+    }),
+
+    prisma.adsMonthlyPackageBudget.findMany({
+      where: {
+        month: (() => {
+          const [year, month] = getBerlinMonthInfo()
+            .month.split("-")
+            .map(Number);
+
+          const next = new Date(Date.UTC(year, month, 1));
+
+          return (
+            `${next.getUTCFullYear()}-` +
+            `${String(next.getUTCMonth() + 1).padStart(2, "0")}`
+          );
+        })(),
+      },
+    }),
   ]);
 
 const verifiedCustomerIds = new Set(
@@ -70,10 +158,10 @@ const eligibleSubscriptions = subscriptions.filter(
 
 
   const packages = PACKAGES.map((pkg) => {
-    const saved = budgets.find(
-      (budget) =>
-        budget.package.toLowerCase() === pkg.name.toLowerCase()
-    );
+const saved = currentMonthlyBudgets.find(
+  (budget) =>
+    budget.package.toLowerCase() === pkg.name.toLowerCase()
+);
 
     const activeVendors = subscriptions.filter(
       (subscription) =>
@@ -101,8 +189,76 @@ return {
   eligibleBudgetCents: eligibleVendors * monthlyBudgetCents,
 };  });
 
+
+  // Gespeicherte Monatszuweisungen zusammenfassen
+  const allocatedBudgetCents = monthlyAllocations.reduce(
+    (sum, allocation) =>
+      sum + allocation.allocatedBudgetCents,
+    0
+  );
+
+  const spentBudgetCents = monthlyAllocations.reduce(
+    (sum, allocation) =>
+      sum + allocation.spentBudgetCents,
+    0
+  );
+
+  const remainingBudgetCents = Math.max(
+    0,
+    allocatedBudgetCents - spentBudgetCents
+  );
+
+  // Anzahl aktuell berechtigter Anbieter mit Monatszuweisung
+  const eligibleCustomerIds = new Set(
+    eligibleSubscriptions.map(
+      (subscription) => subscription.customerId
+    )
+  );
+
+  const currentlyEligibleAllocations =
+    monthlyAllocations.filter((allocation) =>
+      eligibleCustomerIds.has(allocation.customerId)
+    );
+
   return {
     packages,
+
+    budgetMonth: (() => {
+      const [year, month] = getBerlinMonthInfo()
+        .month.split("-")
+        .map(Number);
+
+      const next = new Date(Date.UTC(year, month, 1));
+
+      return new Intl.DateTimeFormat("de-DE", {
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(next);
+    })(),
+
+    nextMonthBudgets: PACKAGES.map((pkg) => {
+      const planned = nextMonthlyBudgets.find(
+        (budget) =>
+          budget.package.toLowerCase() ===
+          pkg.name.toLowerCase()
+      );
+
+      const current = currentMonthlyBudgets.find(
+        (budget) =>
+          budget.package.toLowerCase() ===
+          pkg.name.toLowerCase()
+      );
+
+      return {
+        package: pkg.name,
+        monthlyBudgetCents:
+          planned?.monthlyBudgetCents ??
+          current?.monthlyBudgetCents ??
+          0,
+      };
+    }),
+
     totalVendors: packages.reduce(
       (sum, pkg) => sum + pkg.activeVendors,
       0
@@ -111,14 +267,150 @@ return {
       (sum, pkg) => sum + pkg.totalBudgetCents,
       0
     ),
+
+    allocationSummary: {
+      month: getBerlinMonthInfo().month,
+      assignedVendors: monthlyAllocations.length,
+      currentlyEligibleVendors:
+        currentlyEligibleAllocations.length,
+      allocatedBudgetCents,
+      spentBudgetCents,
+      remainingBudgetCents,
+    },
   };
 };
+
 
 export const action = async ({ request }) => {
   await authenticate.admin(request);
 
   const formData = await request.formData();
-  const updates = [];
+ 
+const intent = formData.get("intent");
+
+if (intent === "allocate-monthly-budgets") {
+  const now = new Date();
+  const { month } = getBerlinMonthInfo(now);
+
+  const [subscriptions, profiles, products] =
+    await Promise.all([
+      prisma.subscription.findMany({
+        where: { status: "active" },
+        select: { customerId: true, package: true },
+      }),
+      prisma.vendorProfile.findMany({
+        where: { verificationStatus: "verified" },
+        select: { customerId: true },
+      }),
+      prisma.marketplaceProduct.findMany({
+        where: {
+          status: "active",
+          adminLocked: false,
+          shopifyProductId: { not: null },
+        },
+        select: { customerId: true },
+        distinct: ["customerId"],
+      }),
+
+    ]);
+
+  const verifiedIds = new Set(
+    profiles.map((profile) => profile.customerId)
+  );
+  const productOwnerIds = new Set(
+    products.map((product) => product.customerId)
+  );
+
+
+
+  // Ausschließlich die gültigen Monatsbudgets verwenden.
+  // Bereits gespeicherte Monatswerte bleiben unverändert.
+  const monthlyBudgets =
+    await ensureMonthlyPackageBudgets(now);
+
+  const budgetByPackage = new Map(
+    monthlyBudgets.map((budget) => [
+      budget.package.toLowerCase(),
+      budget.monthlyBudgetCents,
+    ])
+  );
+
+  let created = 0;
+  let existing = 0;
+  let skipped = 0;
+
+  for (const subscription of subscriptions) {
+    if (
+      !verifiedIds.has(subscription.customerId) ||
+      !productOwnerIds.has(subscription.customerId)
+    ) {
+      skipped++;
+      continue;
+    }
+
+    const packageName = PACKAGES.find(
+      (pkg) =>
+        pkg.name.toLowerCase() ===
+        subscription.package?.toLowerCase()
+    )?.name;
+
+    if (!packageName) {
+      skipped++;
+      continue;
+    }
+
+    const monthlyBudgetCents =
+      budgetByPackage.get(packageName.toLowerCase());
+
+    if (
+      !Number.isSafeInteger(monthlyBudgetCents) ||
+      monthlyBudgetCents < 0
+    ) {
+      skipped++;
+      continue;
+    }
+
+    const allocatedBudgetCents =
+      calculateProratedBudget(monthlyBudgetCents, now);
+
+    try {
+      await prisma.adsVendorAllocation.create({
+        data: {
+          customerId: subscription.customerId,
+          month,
+          package: packageName,
+          allocatedBudgetCents,
+          spentBudgetCents: 0,
+        },
+      });
+
+      created++;
+    } catch (error) {
+      if (error.code === "P2002") {
+        existing++;
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  return {
+    success: true,
+    message:
+      `Monat ${month}: ${created} neue Zuweisungen, ` +
+      `${existing} bereits vorhanden, ` +
+      `${skipped} nicht berücksichtigt.`,
+  };
+}
+
+if (intent !== null && intent !== "save-budgets") {
+  return {
+    success: false,
+    message: "Unbekannte Aktion.",
+  };
+}
+
+ const updates = [];
 
   for (const pkg of PACKAGES) {
     const raw = formData.get(pkg.name);
@@ -157,40 +449,138 @@ export const action = async ({ request }) => {
     });
   }
 
-  await prisma.$transaction(
-    updates.map((item) =>
-      prisma.adsPackageBudget.upsert({
-        where: { package: item.package },
-        update: {
-          monthlyBudgetCents: item.monthlyBudgetCents,
-        },
-        create: item,
-      })
-    )
+
+  // Folgemonat anhand der Berliner Zeitzone bestimmen
+  const { month: currentMonth } = getBerlinMonthInfo();
+  const [year, monthNumber] = currentMonth
+    .split("-")
+    .map(Number);
+
+  const nextMonthDate = new Date(
+    Date.UTC(year, monthNumber, 1)
   );
+
+  const nextMonth =
+    `${nextMonthDate.getUTCFullYear()}-` +
+    `${String(nextMonthDate.getUTCMonth() + 1).padStart(2, "0")}`;
+
+  // Prüfen, ob der Zielmonat weiterhin in der Zukunft liegt.
+  // Maßgeblich ist die Zeitzone Europe/Berlin.
+  const monthAtSave = getBerlinMonthInfo().month;
+
+  if (nextMonth <= monthAtSave) {
+    return {
+      success: false,
+      message:
+        "Während der Bearbeitung hat ein Monatswechsel " +
+        "stattgefunden. Bitte die Seite neu laden und " +
+        "die Budgets erneut speichern.",
+    };
+  }
+
+
+
+  // Folgemonat innerhalb einer Transaktion prüfen und speichern.
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Sperre für konkurrierende Budget-Speichervorgänge.
+      await tx.$queryRaw`
+        SELECT pg_advisory_xact_lock(824105, 1)
+      `;
+
+      const databaseTime = await tx.$queryRaw`
+        SELECT to_char(
+          clock_timestamp() AT TIME ZONE 'Europe/Berlin',
+          'YYYY-MM'
+        ) AS month
+      `;
+
+      const actualMonth = databaseTime[0]?.month;
+
+      if (!actualMonth || nextMonth <= actualMonth) {
+        throw new Error("MONAT_WECHSEL");
+      }
+
+      for (const item of updates) {
+        await tx.adsMonthlyPackageBudget.upsert({
+          where: {
+            month_package: {
+              month: nextMonth,
+              package: item.package,
+            },
+          },
+          update: {
+            monthlyBudgetCents: item.monthlyBudgetCents,
+          },
+          create: {
+            month: nextMonth,
+            package: item.package,
+            monthlyBudgetCents: item.monthlyBudgetCents,
+          },
+        });
+      }
+    }, {
+      maxWait: 10000,
+      timeout: 15000,
+    });
+  } catch (error) {
+    if (error.message === "MONAT_WECHSEL") {
+      return {
+        success: false,
+        message:
+          "Der Monatswechsel hat stattgefunden. " +
+          "Bitte die Seite neu laden und die Budgets erneut speichern.",
+      };
+    }
+
+    throw error;
+  }
 
   return {
     success: true,
-    message: "Werbebudgets wurden erfolgreich gespeichert.",
+    message:
+      `Werbebudgets für ${nextMonth} wurden gespeichert. ` +
+      `Die Budgets des laufenden Monats bleiben unverändert.`,
   };
+
 };
 
 export default function AdsManager() {
-  const { packages, totalVendors, totalBudgetCents } =
-    useLoaderData();
+
+  const {
+    packages,
+    budgetMonth,
+    nextMonthBudgets,
+    totalVendors,
+    totalBudgetCents,
+    allocationSummary,
+  } = useLoaderData();
 
   const fetcher = useFetcher();
 
   const [budgets, setBudgets] = useState(() =>
     Object.fromEntries(
-      packages.map((pkg) => [
-        pkg.name,
+      nextMonthBudgets.map((pkg) => [
+        pkg.package,
         (pkg.monthlyBudgetCents / 100)
           .toFixed(2)
           .replace(".", ","),
       ])
     )
   );
+
+  useEffect(() => {
+    setBudgets(
+      Object.fromEntries(
+        nextMonthBudgets.map((pkg) => [
+          pkg.package,
+          (pkg.monthlyBudgetCents / 100)
+            .toFixed(2)
+            .replace(".", ","),
+        ])
+      )
+    );
+  }, [budgetMonth]);
 
   const saving = fetcher.state !== "idle";
 
@@ -199,6 +589,16 @@ export default function AdsManager() {
       style: "currency",
       currency: "EUR",
     });
+
+const allocateMonthlyBudgets = () => {
+  const formData = new FormData();
+
+  formData.set("intent", "allocate-monthly-budgets");
+
+  fetcher.submit(formData, {
+    method: "post",
+  });
+};
 
   const saveBudgets = () => {
     const formData = new FormData();
@@ -212,10 +612,13 @@ export default function AdsManager() {
 
   return (
     <s-page heading="Marktblatt KI Ads Manager">
-      <s-section heading="Monatliche Werbebudgets">
+<s-section heading={`Werbebudgets für ${budgetMonth}`}>
         <s-paragraph>
-          Hier verwalten wir die monatlichen Werbebudgets
-          pro aktivem Anbieter entsprechend seinem Paket.
+          Hier legen Sie die Werbebudgets pro Anbieter
+          für den kommenden Monat fest.
+          Änderungen wirken sich nicht auf den
+          laufenden Monat oder bereits zugewiesene
+          Werbebudgets aus.
         </s-paragraph>
 
         <s-paragraph>
@@ -402,6 +805,112 @@ export default function AdsManager() {
     Es werden noch keine Budgets zugewiesen oder
     Google Ads Kampagnen gestartet.
   </s-paragraph>
+</s-section>
+
+
+<s-section heading="Monatliche Budgetzuweisung">
+  <s-paragraph>
+    Hier können die anteiligen Monatsbudgets für
+    alle aktuell werbeberechtigten Anbieter
+    einmalig zugewiesen werden.
+  </s-paragraph>
+
+  <s-paragraph>
+    Bereits gespeicherte Monatsbudgets bleiben
+    unverändert. Paket- und Budgetänderungen
+    gelten für bestehende Zuweisungen erst
+    ab dem nächsten Monat.
+  </s-paragraph>
+
+  <s-button
+    variant="primary"
+    disabled={saving}
+    onClick={allocateMonthlyBudgets}
+  >
+    {saving
+      ? "Zuweisung läuft..."
+      : "Monatsbudgets zuweisen"}
+  </s-button>
+
+  <s-paragraph>
+    Die Zuweisung speichert ausschließlich
+    interne Budgetwerte. Es werden keine
+    Google Ads Kampagnen gestartet.
+  </s-paragraph>
+
+
+  <s-box paddingBlockStart="base">
+    <s-heading>Gespeicherte Monatsübersicht</s-heading>
+  </s-box>
+
+  <s-table>
+    <s-table-header-row>
+      <s-table-header>Kennzahl</s-table-header>
+      <s-table-header>Wert</s-table-header>
+    </s-table-header-row>
+
+    <s-table-body>
+      <s-table-row>
+        <s-table-cell>Abrechnungsmonat</s-table-cell>
+        <s-table-cell>
+          {allocationSummary.month}
+        </s-table-cell>
+      </s-table-row>
+
+      <s-table-row>
+        <s-table-cell>Anbieter mit Budget</s-table-cell>
+        <s-table-cell>
+          {allocationSummary.assignedVendors}
+        </s-table-cell>
+      </s-table-row>
+
+      <s-table-row>
+        <s-table-cell>
+          Davon aktuell werbeberechtigt
+        </s-table-cell>
+        <s-table-cell>
+          {allocationSummary.currentlyEligibleVendors}
+        </s-table-cell>
+      </s-table-row>
+
+      <s-table-row>
+        <s-table-cell>Zugewiesenes Budget</s-table-cell>
+        <s-table-cell>
+          {formatEuro(allocationSummary.allocatedBudgetCents)}
+        </s-table-cell>
+      </s-table-row>
+
+      <s-table-row>
+        <s-table-cell>Bereits verbraucht</s-table-cell>
+        <s-table-cell>
+          {formatEuro(allocationSummary.spentBudgetCents)}
+        </s-table-cell>
+      </s-table-row>
+
+      <s-table-row>
+        <s-table-cell>
+          <s-text type="strong">
+            Verbleibendes Budget
+          </s-text>
+        </s-table-cell>
+        <s-table-cell>
+          <s-text type="strong">
+            {formatEuro(allocationSummary.remainingBudgetCents)}
+          </s-text>
+        </s-table-cell>
+      </s-table-row>
+    </s-table-body>
+  </s-table>
+
+  <s-paragraph>
+    Die Übersicht enthält alle gespeicherten
+    Monatszuweisungen, auch von Anbietern, die
+    inzwischen nicht mehr werbeberechtigt sind.
+    Die tatsächlichen Google Ads Ausgaben werden
+    erst nach Anbindung der Google Ads API erfasst.
+  </s-paragraph>
+
+
 </s-section>
 
 
