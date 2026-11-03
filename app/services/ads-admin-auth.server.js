@@ -18,6 +18,15 @@ export async function authenticateAdsAdmin(request) {
     process.env.GOOGLE_ADS_ADMIN_USER_ID;
 
   const currentUserId = sessionToken?.sub;
+console.info("Google Ads Admin Diagnose", {
+  shopValid: session?.shop?.toLowerCase() === ALLOWED_SHOP,
+  sessionTokenPresent: Boolean(sessionToken),
+  userIdPresent: Boolean(currentUserId),
+  userIdMatches:
+    Boolean(allowedUserId) &&
+    Boolean(currentUserId) &&
+    String(currentUserId) === String(allowedUserId),
+});
 
   if (
     !allowedUserId ||
