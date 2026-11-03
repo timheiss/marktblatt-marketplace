@@ -22,6 +22,7 @@ console.info("Google Ads Admin Diagnose", {
   shopValid: session?.shop?.toLowerCase() === ALLOWED_SHOP,
   sessionTokenPresent: Boolean(sessionToken),
   userIdPresent: Boolean(currentUserId),
+  currentUserId: String(currentUserId),
   userIdMatches:
     Boolean(allowedUserId) &&
     Boolean(currentUserId) &&
