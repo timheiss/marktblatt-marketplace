@@ -55,7 +55,20 @@ function calculateProratedBudget(
 }
 
 export const loader = async ({ request }) => {
-await authenticateAdsAdmin(request);
+  const { session } = await authenticateAdsAdmin(request);
+
+  const googleAdsConnection =
+    await prisma.googleAdsConnection.findUnique({
+      where: {
+        shop: session.shop,
+      },
+      select: {
+        status: true,
+      },
+    });
+
+  const googleAdsConnected =
+    googleAdsConnection?.status === "connected";
 
   // Gültige Monatsbudgets automatisch bereitstellen
   await ensureMonthlyPackageBudgets();
@@ -222,6 +235,7 @@ return {
 
   return {
     packages,
+    googleAdsConnected,
 
     budgetMonth: (() => {
       const [year, month] = getBerlinMonthInfo()
@@ -554,6 +568,7 @@ export default function AdsManager() {
     totalVendors,
     totalBudgetCents,
     allocationSummary,
+    googleAdsConnected,
   } = useLoaderData();
 
   const fetcher = useFetcher();
@@ -1058,16 +1073,24 @@ googleOAuthFetcher.submit(formData, {
 
 
 <s-section heading="Google Ads Verbindung">
-  <s-paragraph>
-    Die Google Ads API ist noch nicht verbunden.
-  </s-paragraph>
+  {googleAdsConnected ? (
+    <s-paragraph>
+      Google Ads verbunden.
+    </s-paragraph>
+  ) : (
+    <>
+      <s-paragraph>
+        Die Google Ads API ist noch nicht verbunden.
+      </s-paragraph>
 
-<s-button
-  variant="primary"
-  onClick={startGoogleOAuth}
->
-  Google Ads verbinden
-</s-button>
+      <s-button
+        variant="primary"
+        onClick={startGoogleOAuth}
+      >
+        Google Ads verbinden
+      </s-button>
+    </>
+  )}
 
   <s-paragraph>
     Die Verbindung wird ausschließlich durch
