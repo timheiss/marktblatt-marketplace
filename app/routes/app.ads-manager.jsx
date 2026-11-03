@@ -1,8 +1,8 @@
 
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLoaderData, useFetcher } from "react-router";
-import { authenticate } from "../shopify.server";
+import { authenticateAdsAdmin } from "../services/ads-admin-auth.server";
 import prisma from "../db.server";
 import { ensureMonthlyPackageBudgets } from "../services/ads-monthly-budget.server";
 
@@ -55,7 +55,7 @@ function calculateProratedBudget(
 }
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
+await authenticateAdsAdmin(request);
 
   // Gültige Monatsbudgets automatisch bereitstellen
   await ensureMonthlyPackageBudgets();
@@ -282,7 +282,7 @@ return {
 
 
 export const action = async ({ request }) => {
-  await authenticate.admin(request);
+await authenticateAdsAdmin(request);
 
   const formData = await request.formData();
  
@@ -557,6 +557,115 @@ export default function AdsManager() {
   } = useLoaderData();
 
   const fetcher = useFetcher();
+const googleOAuthFetcher = useFetcher();
+const googleOAuthWindowRef = useRef(null);
+const googleOAuthHandledDataRef = useRef(null);
+
+useEffect(() => {
+  if (googleOAuthFetcher.state !== "idle") {
+    return;
+  }
+
+const data = googleOAuthFetcher.data;
+
+if (!data || typeof data !== "object") {
+  return;
+}
+
+if (googleOAuthHandledDataRef.current === data) {
+  return;
+}
+
+googleOAuthHandledDataRef.current = data;
+
+if (data.success === false) {
+  const oauthWindow = googleOAuthWindowRef.current;
+
+  if (oauthWindow && !oauthWindow.closed) {
+    try {
+      oauthWindow.document.body.textContent =
+        typeof data.message === "string"
+          ? data.message
+          : "Die Google-Ads-Anmeldung konnte nicht gestartet werden.";
+    } catch {
+      // Browser-Tab ist nicht mehr erreichbar.
+    }
+  }
+
+  googleOAuthWindowRef.current = null;
+  return;
+}
+
+  const oauthWindow = googleOAuthWindowRef.current;
+
+  if (!oauthWindow || oauthWindow.closed) {
+    return;
+  }
+
+  if (
+    typeof data.launchUrl !== "string"
+  ) {
+    oauthWindow.document.body.textContent =
+      "Die Google-Ads-Anmeldung konnte nicht gestartet werden.";
+
+    googleOAuthWindowRef.current = null;
+    return;
+  }
+
+let launchUrl;
+
+try {
+  launchUrl = new URL(data.launchUrl);
+} catch {
+  try {
+    oauthWindow.document.body.textContent =
+      "Die Google-Ads-Startadresse ist ungültig.";
+  } catch {
+    // Browser-Tab ist möglicherweise nicht mehr erreichbar.
+  }
+
+  googleOAuthWindowRef.current = null;
+  return;
+}
+
+const launchTokens =
+  launchUrl.searchParams.getAll("token");
+
+const validLaunchUrl =
+  launchUrl.protocol === "https:" &&
+  launchUrl.origin ===
+    "https://marktblatt-marketplace.onrender.com" &&
+  launchUrl.pathname === "/auth/google/launch" &&
+  launchUrl.username === "" &&
+  launchUrl.password === "" &&
+  launchUrl.hash === "" &&
+  [...launchUrl.searchParams.keys()].length === 1 &&
+  launchTokens.length === 1 &&
+  /^[A-Za-z0-9_-]{43}$/.test(launchTokens[0]);
+
+if (!validLaunchUrl) {
+  try {
+    oauthWindow.document.body.textContent =
+      "Ungültige Google-OAuth-Startadresse.";
+  } catch {
+    // Browser-Tab ist nicht mehr erreichbar.
+  }
+
+  googleOAuthWindowRef.current = null;
+  return;
+}
+
+  googleOAuthWindowRef.current = null;
+
+try {
+  oauthWindow.opener = null;
+  oauthWindow.location.replace(launchUrl.toString());
+} catch {
+  window.alert(
+    "Das Google-Ads-Anmeldefenster konnte nicht weitergeleitet werden."
+  );
+}
+}, [googleOAuthFetcher.state, googleOAuthFetcher.data]);
 
   const [budgets, setBudgets] = useState(() =>
     Object.fromEntries(
@@ -609,6 +718,40 @@ const allocateMonthlyBudgets = () => {
 
     fetcher.submit(formData, { method: "post" });
   };
+
+const startGoogleOAuth = () => {
+  if (
+    googleOAuthFetcher.state !== "idle" ||
+    googleOAuthWindowRef.current
+  ) {
+    return;
+  }
+  const oauthWindow = window.open(
+    "about:blank",
+    "_blank"
+  );
+
+  if (!oauthWindow) {
+    window.alert(
+      "Der Browser hat das Anmeldefenster blockiert. Bitte Pop-ups für Marktblatt erlauben."
+    );
+    return;
+  }
+
+googleOAuthWindowRef.current = oauthWindow;
+
+  oauthWindow.document.title = "Google Ads verbinden";
+
+  oauthWindow.document.body.textContent =
+    "Die sichere Google-Ads-Anmeldung wird vorbereitet.";
+
+const formData = new FormData();
+
+googleOAuthFetcher.submit(formData, {
+  method: "post",
+  action: "/auth/google",
+});
+};
 
   return (
     <s-page heading="Marktblatt KI Ads Manager">
@@ -914,11 +1057,36 @@ const allocateMonthlyBudgets = () => {
 </s-section>
 
 
-      <s-section heading="Google Ads Verbindung">
-        <s-paragraph>
-          Die Google Ads API ist noch nicht verbunden.
-        </s-paragraph>
-      </s-section>
+<s-section heading="Google Ads Verbindung">
+  <s-paragraph>
+    Die Google Ads API ist noch nicht verbunden.
+  </s-paragraph>
+
+<s-button
+  variant="primary"
+  onClick={startGoogleOAuth}
+>
+  Google Ads verbinden
+</s-button>
+
+  <s-paragraph>
+    Die Verbindung wird ausschließlich durch
+    einen berechtigten Marktblatt-Administrator
+    eingerichtet.
+  </s-paragraph>
+
+  <s-paragraph>
+    Nach erfolgreicher Einrichtung können
+    Google Ads Konten und Kampagnendaten
+    zunächst ausschließlich gelesen werden.
+  </s-paragraph>
+
+  <s-paragraph>
+    Es werden noch keine Google Ads Kampagnen
+    erstellt, verändert oder gestartet.
+  </s-paragraph>
+</s-section>
+
     </s-page>
   );
 }

@@ -439,3 +439,49 @@ model AdsMonthlyPackageBudget {
   @@index([month])
 }
 
+
+model GoogleOAuthAttempt {
+  id                String    @id @default(cuid())
+  nonceHash         String    @unique
+  launchTokenHash   String?   @unique
+  launchConsumedAt  DateTime?
+  encryptedState    String?   @db.Text
+  userId            String
+  shop              String
+  expiresAt         DateTime
+  usedAt            DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@index([expiresAt])
+}
+
+
+/**
+ * =========================================================
+ * GOOGLE ADS VERBINDUNG
+ * Zentrale OAuth-Verbindung für Marktblatt
+ * =========================================================
+ */
+
+model GoogleAdsConnection {
+  id String @id @default(cuid())
+
+  // Nur eine zentrale Verbindung je Shopify-Shop
+  shop String @unique
+
+  // Berechtigter Shopify-Administrator
+  userId String
+
+  // AES-256-GCM verschlüsseltes Google-Refresh-Token
+  encryptedRefreshToken String @db.Text
+
+  // Verbindungsstatus
+  status String @default("connected")
+
+  // Zeitpunkt der erfolgreichen Verbindung
+  connectedAt DateTime @default(now())
+
+  // Verwaltung
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
