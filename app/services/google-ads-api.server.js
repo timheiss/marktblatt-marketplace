@@ -28,7 +28,7 @@ export async function listGoogleAdsAccounts(shop) {
   );
 
   const response = await fetch(
-    "https://googleads.googleapis.com/v22/customers:listAccessibleCustomers",
+"https://googleads.googleapis.com/v25/customers:listAccessibleCustomers",
     {
       method: "GET",
       headers: {
