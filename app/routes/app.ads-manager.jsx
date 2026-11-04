@@ -8,6 +8,7 @@ import { ensureMonthlyPackageBudgets } from "../services/ads-monthly-budget.serv
 import {
   listGoogleAdsAccounts,
   getGoogleAdsAccountDetails,
+  listGoogleAdsManagerAccounts,
 } from "../services/google-ads-api.server";
 
 const PACKAGES = [
@@ -77,6 +78,24 @@ export const loader = async ({ request }) => {
   let googleAdsAccounts = [];
   let googleAdsAccountsError = null;
   let googleAdsAccountDetails = [];
+
+  let googleAdsManagerAccounts = [];
+  let googleAdsManagerAccountsError = null;
+
+  if (googleAdsConnected) {
+    try {
+      googleAdsManagerAccounts =
+        await listGoogleAdsManagerAccounts(session.shop);
+    } catch (error) {
+      console.error(
+        "Google Ads MCC-Kontenabruf fehlgeschlagen:",
+        error.message
+      );
+
+      googleAdsManagerAccountsError =
+        "Die MCC-Unterkonten konnten nicht geladen werden.";
+    }
+  }
 
   if (googleAdsConnected) {
     try {
@@ -290,6 +309,8 @@ return {
     googleAdsAccounts,
     googleAdsAccountDetails,
     googleAdsAccountsError,
+    googleAdsManagerAccounts,
+    googleAdsManagerAccountsError,
 
     budgetMonth: (() => {
       const [year, month] = getBerlinMonthInfo()
@@ -626,6 +647,8 @@ export default function AdsManager() {
     googleAdsAccounts,
     googleAdsAccountDetails,
     googleAdsAccountsError,
+    googleAdsManagerAccounts,
+    googleAdsManagerAccountsError,
   } = useLoaderData();
 
   const fetcher = useFetcher();
@@ -1181,6 +1204,49 @@ googleOAuthFetcher.submit(formData, {
     <s-paragraph>
       Bitte zuerst Google Ads verbinden.
     </s-paragraph>
+  )}
+</s-section>
+
+<s-section heading="Google Ads MCC-Unterkonten">
+  {googleAdsManagerAccountsError && (
+    <s-banner tone="critical">
+      {googleAdsManagerAccountsError}
+    </s-banner>
+  )}
+
+  {!googleAdsManagerAccountsError &&
+    googleAdsManagerAccounts.length === 0 && (
+      <s-paragraph>
+        Keine MCC-Unterkonten gefunden.
+      </s-paragraph>
+    )}
+
+  {googleAdsManagerAccounts.length > 0 && (
+    <s-table>
+      <s-table-header-row>
+        <s-table-header>Kontoname</s-table-header>
+        <s-table-header>Kundennummer</s-table-header>
+        <s-table-header>Kontotyp</s-table-header>
+        <s-table-header>Status</s-table-header>
+        <s-table-header>Währung</s-table-header>
+      </s-table-header-row>
+
+      <s-table-body>
+        {googleAdsManagerAccounts.map((account) => (
+          <s-table-row key={account.id}>
+            <s-table-cell>{account.name}</s-table-cell>
+            <s-table-cell>{account.id}</s-table-cell>
+            <s-table-cell>
+              {account.isManager
+                ? "Verwaltungskonto (MCC)"
+                : "Werbekonto"}
+            </s-table-cell>
+            <s-table-cell>{account.status}</s-table-cell>
+            <s-table-cell>{account.currency}</s-table-cell>
+          </s-table-row>
+        ))}
+      </s-table-body>
+    </s-table>
   )}
 </s-section>
 
