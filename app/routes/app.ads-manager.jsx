@@ -5,7 +5,10 @@ import { useLoaderData, useFetcher } from "react-router";
 import { authenticateAdsAdmin } from "../services/ads-admin-auth.server";
 import prisma from "../db.server";
 import { ensureMonthlyPackageBudgets } from "../services/ads-monthly-budget.server";
-import { listGoogleAdsAccounts } from "../services/google-ads-api.server";
+import {
+  listGoogleAdsAccounts,
+  getGoogleAdsAccountDetails,
+} from "../services/google-ads-api.server";
 
 const PACKAGES = [
   { name: "Starter", products: 10 },
@@ -73,12 +76,40 @@ export const loader = async ({ request }) => {
 
   let googleAdsAccounts = [];
   let googleAdsAccountsError = null;
+  let googleAdsAccountDetails = [];
 
   if (googleAdsConnected) {
     try {
       googleAdsAccounts = await listGoogleAdsAccounts(
         session.shop
       );
+
+      googleAdsAccountDetails = await Promise.all(
+        googleAdsAccounts.map(async (resourceName) => {
+          const customerId = resourceName.split("/")[1];
+
+          try {
+            return await getGoogleAdsAccountDetails(
+              session.shop,
+              customerId
+            );
+          } catch (error) {
+            console.error(
+              `Google Ads Kontodetails ${customerId}:`,
+              error.message
+            );
+
+            return {
+              id: customerId,
+              name: "Kontodetails nicht verfügbar",
+              isManager: false,
+              status: "UNKNOWN",
+              currency: "",
+            };
+          }
+        })
+      );
+
     } catch (error) {
       console.error(
         "Google Ads Kontenabruf fehlgeschlagen:",
@@ -257,6 +288,7 @@ return {
     packages,
     googleAdsConnected,
     googleAdsAccounts,
+    googleAdsAccountDetails,
     googleAdsAccountsError,
 
     budgetMonth: (() => {
@@ -592,6 +624,7 @@ export default function AdsManager() {
     allocationSummary,
     googleAdsConnected,
     googleAdsAccounts,
+    googleAdsAccountDetails,
     googleAdsAccountsError,
   } = useLoaderData();
 
@@ -1109,11 +1142,34 @@ googleOAuthFetcher.submit(formData, {
             {" "}{googleAdsAccounts.length}
           </s-paragraph>
 
-          {googleAdsAccounts.map((account) => (
-            <s-paragraph key={account}>
-              {account}
-            </s-paragraph>
-          ))}
+          <s-table>
+            <s-table-header-row>
+              <s-table-header>Kontoname</s-table-header>
+              <s-table-header>Kundennummer</s-table-header>
+              <s-table-header>Kontotyp</s-table-header>
+              <s-table-header>Status</s-table-header>
+              <s-table-header>Währung</s-table-header>
+            </s-table-header-row>
+
+            <s-table-body>
+              {googleAdsAccountDetails.map((account) => (
+                <s-table-row key={account.id}>
+                  <s-table-cell>{account.name}</s-table-cell>
+                  <s-table-cell>{account.id}</s-table-cell>
+                  <s-table-cell>
+                    {account.status === "UNKNOWN" &&
+                    account.name === "Kontodetails nicht verfügbar"
+                      ? "Unbekannt"
+                      : account.isManager
+                        ? "Verwaltungskonto (MCC)"
+                        : "Werbekonto"}
+                  </s-table-cell>
+                  <s-table-cell>{account.status}</s-table-cell>
+                  <s-table-cell>{account.currency}</s-table-cell>
+                </s-table-row>
+              ))}
+            </s-table-body>
+          </s-table>
         </>
       ) : (
         <s-paragraph>
