@@ -5,6 +5,7 @@ import { useLoaderData, useFetcher } from "react-router";
 import { authenticateAdsAdmin } from "../services/ads-admin-auth.server";
 import prisma from "../db.server";
 import { ensureMonthlyPackageBudgets } from "../services/ads-monthly-budget.server";
+import { listGoogleAdsAccounts } from "../services/google-ads-api.server";
 
 const PACKAGES = [
   { name: "Starter", products: 10 },
@@ -69,6 +70,25 @@ export const loader = async ({ request }) => {
 
   const googleAdsConnected =
     googleAdsConnection?.status === "connected";
+
+  let googleAdsAccounts = [];
+  let googleAdsAccountsError = null;
+
+  if (googleAdsConnected) {
+    try {
+      googleAdsAccounts = await listGoogleAdsAccounts(
+        session.shop
+      );
+    } catch (error) {
+      console.error(
+        "Google Ads Kontenabruf fehlgeschlagen:",
+        error.message
+      );
+
+      googleAdsAccountsError =
+        "Google Ads Konten konnten nicht geladen werden.";
+    }
+  }
 
   // Gültige Monatsbudgets automatisch bereitstellen
   await ensureMonthlyPackageBudgets();
@@ -236,6 +256,8 @@ return {
   return {
     packages,
     googleAdsConnected,
+    googleAdsAccounts,
+    googleAdsAccountsError,
 
     budgetMonth: (() => {
       const [year, month] = getBerlinMonthInfo()
@@ -569,6 +591,8 @@ export default function AdsManager() {
     totalBudgetCents,
     allocationSummary,
     googleAdsConnected,
+    googleAdsAccounts,
+    googleAdsAccountsError,
   } = useLoaderData();
 
   const fetcher = useFetcher();
@@ -1071,6 +1095,38 @@ googleOAuthFetcher.submit(formData, {
 
 </s-section>
 
+<s-section heading="Google Ads Werbekonten">
+  {googleAdsConnected ? (
+    <>
+      {googleAdsAccountsError ? (
+        <s-banner tone="critical">
+          {googleAdsAccountsError}
+        </s-banner>
+      ) : googleAdsAccounts.length > 0 ? (
+        <>
+          <s-paragraph>
+            Verfügbare Google Ads Konten:
+            {" "}{googleAdsAccounts.length}
+          </s-paragraph>
+
+          {googleAdsAccounts.map((account) => (
+            <s-paragraph key={account}>
+              {account}
+            </s-paragraph>
+          ))}
+        </>
+      ) : (
+        <s-paragraph>
+          Keine Google Ads Konten gefunden.
+        </s-paragraph>
+      )}
+    </>
+  ) : (
+    <s-paragraph>
+      Bitte zuerst Google Ads verbinden.
+    </s-paragraph>
+  )}
+</s-section>
 
 <s-section heading="Google Ads Verbindung">
   {googleAdsConnected ? (

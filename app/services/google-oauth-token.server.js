@@ -58,3 +58,57 @@ export async function exchangeGoogleOAuthCode(code) {
 
   return tokens;
 }
+
+
+export async function refreshGoogleOAuthAccessToken(refreshToken) {
+  const clientId = process.env.GOOGLE_ADS_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      "Google OAuth: Serverkonfiguration unvollständig."
+    );
+  }
+
+  if (typeof refreshToken !== "string" || !refreshToken) {
+    throw new Error(
+      "Google OAuth: Gültiges Refresh-Token fehlt."
+    );
+  }
+
+  const body = new URLSearchParams({
+    refresh_token: refreshToken,
+    client_id: clientId,
+    client_secret: clientSecret,
+    grant_type: "refresh_token",
+  });
+
+  const response = await fetch(GOOGLE_TOKEN_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Google OAuth: Token-Aktualisierung fehlgeschlagen (HTTP ${response.status}).`
+    );
+  }
+
+  const tokens = await response.json();
+
+  if (
+    typeof tokens.access_token !== "string" ||
+    !tokens.access_token
+  ) {
+    throw new Error(
+      "Google OAuth: Kein gültiges Access-Token erhalten."
+    );
+  }
+
+  return tokens.access_token;
+}
+
