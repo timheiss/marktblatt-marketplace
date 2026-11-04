@@ -185,6 +185,7 @@ export async function listGoogleAdsManagerAccounts(shop) {
   }
 
   const data = await response.json();
+console.log("Google Ads MCC API-Ergebnis:", JSON.stringify(data));
 
   return (data.results ?? [])
     .map((result) => result.customerClient)
