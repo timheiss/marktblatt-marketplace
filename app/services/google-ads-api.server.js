@@ -323,3 +323,20 @@ body: JSON.stringify({ query }),
   }));
 }
 
+/**
+ * Erstellt einen eindeutigen Kampagnennamen
+ * anhand der Shopify-Anbieter-ID.
+ *
+ * Diese Funktion führt keine Google Ads API-Anfrage aus.
+ */
+export function buildMarktblattVendorCampaignName(customerId) {
+  const normalizedId = String(customerId ?? "").trim();
+
+  if (!/^gid:\/\/shopify\/Customer\/[1-9]\d*$/.test(normalizedId)) {
+    throw new Error(
+      "Google Ads: Ungültige Shopify-Anbieter-ID."
+    );
+  }
+
+  return `Marktblatt | ${normalizedId}`;
+}
