@@ -201,6 +201,7 @@ const [
   monthlyAllocations,
   currentMonthlyBudgets,
   nextMonthlyBudgets,
+    vendorCampaigns,
 ] =
   await Promise.all([
     prisma.adsPackageBudget.findMany(),
@@ -363,6 +364,7 @@ return {
     combinedGoogleAdsAccounts,
     googleAdsCampaigns,
     googleAdsCampaignsError,
+    vendorCampaigns,
     budgetMonth: (() => {
       const [year, month] = getBerlinMonthInfo()
         .month.split("-")
@@ -451,6 +453,15 @@ if (intent === "allocate-monthly-budgets") {
         select: { customerId: true },
         distinct: ["customerId"],
       }),
+
+    prisma.adsVendorCampaign.findMany({
+      select: {
+        customerId: true,
+        googleAdsCustomerId: true,
+        googleCampaignId: true,
+        status: true,
+      },
+    }),
 
     ]);
 
@@ -703,6 +714,7 @@ export default function AdsManager() {
     combinedGoogleAdsAccounts,
     googleAdsCampaigns,
     googleAdsCampaignsError,
+    vendorCampaigns,
   } = useLoaderData();
 
   const fetcher = useFetcher();
@@ -1351,6 +1363,51 @@ googleOAuthFetcher.submit(formData, {
   <s-paragraph>
     Die Kampagnendaten werden direkt aus Google Ads gelesen.
     Es werden keine Kampagnen erstellt oder verändert.
+  </s-paragraph>
+</s-section>
+
+<s-section heading="Google Ads Kampagnenzuordnung – Anbieter">
+  <s-paragraph>
+    Hier sehen Sie die dauerhaft gespeicherten
+    Zuordnungen zwischen Marktblatt-Anbietern
+    und ihren Google Ads-Kampagnen.
+  </s-paragraph>
+
+  <s-paragraph>
+    Gespeicherte Zuordnungen: {vendorCampaigns.length}
+  </s-paragraph>
+
+  {vendorCampaigns.length > 0 ? (
+    <s-table>
+      <s-table-header-row>
+        <s-table-header>Anbieter-ID</s-table-header>
+        <s-table-header>Google Ads Konto</s-table-header>
+        <s-table-header>Kampagnen-ID</s-table-header>
+        <s-table-header>Status</s-table-header>
+      </s-table-header-row>
+
+      <s-table-body>
+        {vendorCampaigns.map((vendor) => (
+          <s-table-row key={vendor.customerId}>
+            <s-table-cell>{vendor.customerId}</s-table-cell>
+            <s-table-cell>{vendor.googleAdsCustomerId}</s-table-cell>
+            <s-table-cell>
+              {vendor.googleCampaignId ?? "Noch nicht zugeordnet"}
+            </s-table-cell>
+            <s-table-cell>{vendor.status}</s-table-cell>
+          </s-table-row>
+        ))}
+      </s-table-body>
+    </s-table>
+  ) : (
+    <s-paragraph>
+      Noch keine Anbieter-Kampagnenzuordnungen vorhanden.
+    </s-paragraph>
+  )}
+
+  <s-paragraph>
+    Diese Übersicht ist schreibgeschützt.
+    Es werden keine Google Ads-Kampagnen verändert.
   </s-paragraph>
 </s-section>
 
