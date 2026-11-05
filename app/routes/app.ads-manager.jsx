@@ -140,6 +140,30 @@ export const loader = async ({ request }) => {
     }
   }
 
+  // Google Ads Konten zusammenführen und Duplikate entfernen.
+  const excludedGoogleAdsAccountIds = new Set([
+    "7243645600",
+  ]);
+
+  const combinedGoogleAdsAccounts = Array.from(
+    new Map(
+      [
+        ...googleAdsAccountDetails,
+        ...googleAdsManagerAccounts,
+      ]
+        .filter(
+          (account) =>
+            account?.id &&
+            !excludedGoogleAdsAccountIds.has(account.id)
+        )
+        .map((account) => [account.id, account])
+    ).values()
+  ).sort((a, b) => {
+    if (a.id === "2908836119") return -1;
+    if (b.id === "2908836119") return 1;
+    return a.name.localeCompare(b.name, "de");
+  });
+
   // Gültige Monatsbudgets automatisch bereitstellen
   await ensureMonthlyPackageBudgets();
 
@@ -311,6 +335,7 @@ return {
     googleAdsAccountsError,
     googleAdsManagerAccounts,
     googleAdsManagerAccountsError,
+    combinedGoogleAdsAccounts,
 
     budgetMonth: (() => {
       const [year, month] = getBerlinMonthInfo()
@@ -649,6 +674,7 @@ export default function AdsManager() {
     googleAdsAccountsError,
     googleAdsManagerAccounts,
     googleAdsManagerAccountsError,
+    combinedGoogleAdsAccounts,
   } = useLoaderData();
 
   const fetcher = useFetcher();
@@ -1151,49 +1177,61 @@ googleOAuthFetcher.submit(formData, {
 
 </s-section>
 
+
 <s-section heading="Google Ads Werbekonten">
   {googleAdsConnected ? (
     <>
-      {googleAdsAccountsError ? (
+      {googleAdsAccountsError && (
         <s-banner tone="critical">
           {googleAdsAccountsError}
         </s-banner>
-      ) : googleAdsAccounts.length > 0 ? (
-        <>
-          <s-paragraph>
-            Verfügbare Google Ads Konten:
-            {" "}{googleAdsAccounts.length}
-          </s-paragraph>
+      )}
 
-          <s-table>
-            <s-table-header-row>
-              <s-table-header>Kontoname</s-table-header>
-              <s-table-header>Kundennummer</s-table-header>
-              <s-table-header>Kontotyp</s-table-header>
-              <s-table-header>Status</s-table-header>
-              <s-table-header>Währung</s-table-header>
-            </s-table-header-row>
+      {googleAdsManagerAccountsError && (
+        <s-banner tone="critical">
+          {googleAdsManagerAccountsError}
+        </s-banner>
+      )}
 
-            <s-table-body>
-              {googleAdsAccountDetails.map((account) => (
-                <s-table-row key={account.id}>
-                  <s-table-cell>{account.name}</s-table-cell>
-                  <s-table-cell>{account.id}</s-table-cell>
-                  <s-table-cell>
-                    {account.status === "UNKNOWN" &&
-                    account.name === "Kontodetails nicht verfügbar"
-                      ? "Unbekannt"
-                      : account.isManager
-                        ? "Verwaltungskonto (MCC)"
-                        : "Werbekonto"}
-                  </s-table-cell>
-                  <s-table-cell>{account.status}</s-table-cell>
-                  <s-table-cell>{account.currency}</s-table-cell>
-                </s-table-row>
-              ))}
-            </s-table-body>
-          </s-table>
-        </>
+      <s-paragraph>
+        Verfügbare Google Ads Konten:{" "}
+        {combinedGoogleAdsAccounts.length}
+      </s-paragraph>
+
+      {combinedGoogleAdsAccounts.length > 0 ? (
+        <s-table>
+          <s-table-header-row>
+            <s-table-header>Kontoname</s-table-header>
+            <s-table-header>Kundennummer</s-table-header>
+            <s-table-header>Kontotyp</s-table-header>
+            <s-table-header>Status</s-table-header>
+            <s-table-header>Währung</s-table-header>
+            <s-table-header>Verwendung</s-table-header>
+          </s-table-header-row>
+
+          <s-table-body>
+            {combinedGoogleAdsAccounts.map((account) => (
+              <s-table-row key={account.id}>
+                <s-table-cell>{account.name}</s-table-cell>
+                <s-table-cell>{account.id}</s-table-cell>
+                <s-table-cell>
+                  {account.isManager
+                    ? "Verwaltungskonto (MCC)"
+                    : "Werbekonto"}
+                </s-table-cell>
+                <s-table-cell>{account.status}</s-table-cell>
+                <s-table-cell>{account.currency}</s-table-cell>
+                <s-table-cell>
+                  {account.id === "2908836119"
+                    ? "Marktblatt Hauptwerbekonto"
+                    : account.isManager
+                      ? "Verwaltung"
+                      : "Nur Anzeige"}
+                </s-table-cell>
+              </s-table-row>
+            ))}
+          </s-table-body>
+        </s-table>
       ) : (
         <s-paragraph>
           Keine Google Ads Konten gefunden.
@@ -1207,48 +1245,6 @@ googleOAuthFetcher.submit(formData, {
   )}
 </s-section>
 
-<s-section heading="Google Ads MCC-Unterkonten">
-  {googleAdsManagerAccountsError && (
-    <s-banner tone="critical">
-      {googleAdsManagerAccountsError}
-    </s-banner>
-  )}
-
-  {!googleAdsManagerAccountsError &&
-    googleAdsManagerAccounts.length === 0 && (
-      <s-paragraph>
-        Keine MCC-Unterkonten gefunden.
-      </s-paragraph>
-    )}
-
-  {googleAdsManagerAccounts.length > 0 && (
-    <s-table>
-      <s-table-header-row>
-        <s-table-header>Kontoname</s-table-header>
-        <s-table-header>Kundennummer</s-table-header>
-        <s-table-header>Kontotyp</s-table-header>
-        <s-table-header>Status</s-table-header>
-        <s-table-header>Währung</s-table-header>
-      </s-table-header-row>
-
-      <s-table-body>
-        {googleAdsManagerAccounts.map((account) => (
-          <s-table-row key={account.id}>
-            <s-table-cell>{account.name}</s-table-cell>
-            <s-table-cell>{account.id}</s-table-cell>
-            <s-table-cell>
-              {account.isManager
-                ? "Verwaltungskonto (MCC)"
-                : "Werbekonto"}
-            </s-table-cell>
-            <s-table-cell>{account.status}</s-table-cell>
-            <s-table-cell>{account.currency}</s-table-cell>
-          </s-table-row>
-        ))}
-      </s-table-body>
-    </s-table>
-  )}
-</s-section>
 
 <s-section heading="Google Ads Verbindung">
   {googleAdsConnected ? (
