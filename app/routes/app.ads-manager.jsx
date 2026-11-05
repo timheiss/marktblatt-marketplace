@@ -437,6 +437,64 @@ await authenticateAdsAdmin(request);
  
 const intent = formData.get("intent");
 
+if (intent === "prepare-vendor-campaigns") {
+  const [subscriptions, profiles, products] = await Promise.all([
+    prisma.subscription.findMany({
+      where: { status: "active" },
+      select: { customerId: true },
+    }),
+    prisma.vendorProfile.findMany({
+      where: { verificationStatus: "verified" },
+      select: { customerId: true },
+    }),
+    prisma.marketplaceProduct.findMany({
+      where: {
+        status: "active",
+        adminLocked: false,
+        shopifyProductId: { not: null },
+      },
+      select: { customerId: true },
+      distinct: ["customerId"],
+    }),
+  ]);
+
+  const verifiedIds = new Set(
+    profiles.map((profile) => profile.customerId)
+  );
+
+  const productOwnerIds = new Set(
+    products.map((product) => product.customerId)
+  );
+
+  const eligibleIds = [
+    ...new Set(
+      subscriptions
+        .filter(
+          (subscription) =>
+            verifiedIds.has(subscription.customerId) &&
+            productOwnerIds.has(subscription.customerId)
+        )
+        .map((subscription) => subscription.customerId)
+    ),
+  ];
+
+  const result = await prisma.adsVendorCampaign.createMany({
+    data: eligibleIds.map((customerId) => ({
+      customerId,
+      googleAdsCustomerId: "2908836119",
+      status: "pending",
+    })),
+    skipDuplicates: true,
+  });
+
+  return {
+    success: true,
+    message:
+      `${result.count} neue Anbieter vorbereitet. ` +
+      `${eligibleIds.length - result.count} bereits vorhanden.`,
+  };
+}
+
 if (intent === "allocate-monthly-budgets") {
   const now = new Date();
   const { month } = getBerlinMonthInfo(now);
@@ -859,6 +917,16 @@ try {
       style: "currency",
       currency: "EUR",
     });
+
+const prepareVendorCampaigns = () => {
+  const formData = new FormData();
+
+  formData.set("intent", "prepare-vendor-campaigns");
+
+  fetcher.submit(formData, {
+    method: "post",
+  });
+};
 
 const allocateMonthlyBudgets = () => {
   const formData = new FormData();
@@ -1367,6 +1435,19 @@ googleOAuthFetcher.submit(formData, {
 </s-section>
 
 <s-section heading="Google Ads Kampagnenzuordnung – Anbieter">
+
+<s-box paddingBlockEnd="base">
+  <s-button
+    variant="primary"
+    disabled={saving}
+    onClick={prepareVendorCampaigns}
+  >
+    {saving
+      ? "Vorbereitung läuft..."
+      : "Anbieter-Kampagnen vorbereiten"}
+  </s-button>
+</s-box>
+
   <s-paragraph>
     Hier sehen Sie die dauerhaft gespeicherten
     Zuordnungen zwischen Marktblatt-Anbietern
