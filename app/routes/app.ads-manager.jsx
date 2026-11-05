@@ -9,6 +9,7 @@ import {
   listGoogleAdsAccounts,
   getGoogleAdsAccountDetails,
   listGoogleAdsManagerAccounts,
+  listMarktblattGoogleAdsCampaigns,
 } from "../services/google-ads-api.server";
 
 const PACKAGES = [
@@ -137,6 +138,25 @@ export const loader = async ({ request }) => {
 
       googleAdsAccountsError =
         "Google Ads Konten konnten nicht geladen werden.";
+    }
+  }
+
+  // Kampagnen ausschließlich aus Marktblatt.online lesen.
+  let googleAdsCampaigns = [];
+  let googleAdsCampaignsError = null;
+
+  if (googleAdsConnected) {
+    try {
+      googleAdsCampaigns =
+        await listMarktblattGoogleAdsCampaigns(session.shop);
+    } catch (error) {
+      console.error(
+        "Google Ads Kampagnenabruf fehlgeschlagen:",
+        error.message
+      );
+
+      googleAdsCampaignsError =
+        "Die Marktblatt-Kampagnen konnten nicht geladen werden.";
     }
   }
 
@@ -336,7 +356,8 @@ return {
     googleAdsManagerAccounts,
     googleAdsManagerAccountsError,
     combinedGoogleAdsAccounts,
-
+    googleAdsCampaigns,
+    googleAdsCampaignsError,
     budgetMonth: (() => {
       const [year, month] = getBerlinMonthInfo()
         .month.split("-")
@@ -675,6 +696,8 @@ export default function AdsManager() {
     googleAdsManagerAccounts,
     googleAdsManagerAccountsError,
     combinedGoogleAdsAccounts,
+    googleAdsCampaigns,
+    googleAdsCampaignsError,
   } = useLoaderData();
 
   const fetcher = useFetcher();
@@ -1245,6 +1268,86 @@ googleOAuthFetcher.submit(formData, {
   )}
 </s-section>
 
+<s-section heading="Google Ads Kampagnen – Marktblatt.online">
+  {googleAdsConnected ? (
+    <>
+      {googleAdsCampaignsError && (
+        <s-banner tone="critical">
+          {googleAdsCampaignsError}
+        </s-banner>
+      )}
+
+      {!googleAdsCampaignsError && (
+        <>
+          <s-paragraph>
+            Gefundene Kampagnen: {googleAdsCampaigns.length}
+          </s-paragraph>
+
+          {googleAdsCampaigns.length > 0 ? (
+            <s-table>
+              <s-table-header-row>
+                <s-table-header>Kampagne</s-table-header>
+                <s-table-header>Kampagnen-ID</s-table-header>
+                <s-table-header>Status</s-table-header>
+                <s-table-header>Typ</s-table-header>
+                <s-table-header>Tagesbudget</s-table-header>
+                <s-table-header>Ausgaben diesen Monat</s-table-header>
+              </s-table-header-row>
+
+              <s-table-body>
+                {googleAdsCampaigns.map((campaign) => (
+                  <s-table-row key={campaign.id}>
+                    <s-table-cell>{campaign.name}</s-table-cell>
+                    <s-table-cell>{campaign.id}</s-table-cell>
+                    <s-table-cell>
+                      {campaign.status === "ENABLED"
+                        ? "Aktiv"
+                        : campaign.status === "PAUSED"
+                          ? "Pausiert"
+                          : campaign.status}
+                    </s-table-cell>
+                    <s-table-cell>{campaign.type}</s-table-cell>
+                    <s-table-cell>
+                      {campaign.dailyBudgetEuros.toLocaleString(
+                        "de-DE",
+                        {
+                          style: "currency",
+                          currency: "EUR",
+                        }
+                      )}
+                    </s-table-cell>
+                    <s-table-cell>
+                      {campaign.spentThisMonthEuros.toLocaleString(
+                        "de-DE",
+                        {
+                          style: "currency",
+                          currency: "EUR",
+                        }
+                      )}
+                    </s-table-cell>
+                  </s-table-row>
+                ))}
+              </s-table-body>
+            </s-table>
+          ) : (
+            <s-paragraph>
+              Keine Kampagnen im Marktblatt-Werbekonto gefunden.
+            </s-paragraph>
+          )}
+        </>
+      )}
+    </>
+  ) : (
+    <s-paragraph>
+      Bitte zuerst Google Ads verbinden.
+    </s-paragraph>
+  )}
+
+  <s-paragraph>
+    Die Kampagnendaten werden direkt aus Google Ads gelesen.
+    Es werden keine Kampagnen erstellt oder verändert.
+  </s-paragraph>
+</s-section>
 
 <s-section heading="Google Ads Verbindung">
   {googleAdsConnected ? (

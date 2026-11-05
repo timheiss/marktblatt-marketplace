@@ -230,3 +230,96 @@ export function assertMarktblattGoogleAdsCustomer(customerId) {
   return normalizedId;
 }
 
+
+/**
+ * Liest ausschließlich Kampagnen des Marktblatt-Werbekontos.
+ * Es werden keine Änderungen an Google Ads vorgenommen.
+ */
+export async function listMarktblattGoogleAdsCampaigns(shop) {
+  const customerId = assertMarktblattGoogleAdsCustomer(
+    MARKTBLATT_GOOGLE_ADS_CUSTOMER_ID
+  );
+
+  const connection = await prisma.googleAdsConnection.findUnique({
+    where: { shop },
+    select: {
+      encryptedRefreshToken: true,
+      status: true,
+    },
+  });
+
+  if (
+    connection?.status !== "connected" ||
+    !connection.encryptedRefreshToken
+  ) {
+    throw new Error(
+      "Google Ads: Keine aktive Verbindung vorhanden."
+    );
+  }
+
+  const refreshToken = decryptGoogleToken(
+    connection.encryptedRefreshToken
+  );
+
+  const accessToken = await refreshGoogleOAuthAccessToken(
+    refreshToken
+  );
+
+  const query = `
+    SELECT
+      campaign.id,
+      campaign.name,
+      campaign.status,
+      campaign.advertising_channel_type,
+      campaign_budget.amount_micros,
+      metrics.cost_micros
+    FROM campaign
+    WHERE campaign.status != 'REMOVED'
+      AND segments.date DURING THIS_MONTH
+    ORDER BY campaign.id
+  `;
+
+  const response = await fetch(
+    `https://googleads.googleapis.com/v25/customers/${customerId}/googleAds:search`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "login-customer-id": MARKTBLATT_GOOGLE_ADS_MANAGER_ID,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query, pageSize: 1000 }),
+      signal: AbortSignal.timeout(15000),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+
+    console.error(
+      "Google Ads Kampagnenabfrage:",
+      response.status,
+      errorText.slice(0, 1500)
+    );
+
+    throw new Error(
+      `Google Ads: Kampagnenabruf fehlgeschlagen (HTTP ${response.status}).`
+    );
+  }
+
+  const data = await response.json();
+
+  return (data.results ?? []).map((result) => ({
+    id: String(result.campaign?.id ?? ""),
+    name: result.campaign?.name ?? "Ohne Kampagnennamen",
+    status: result.campaign?.status ?? "UNKNOWN",
+    type:
+      result.campaign?.advertisingChannelType ?? "UNKNOWN",
+    dailyBudgetEuros:
+      Number(result.campaignBudget?.amountMicros ?? 0) /
+      1000000,
+    spentThisMonthEuros:
+      Number(result.metrics?.costMicros ?? 0) / 1000000,
+  }));
+}
+
