@@ -485,3 +485,37 @@ model GoogleAdsConnection {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+/**
+ * =========================================================
+ * GOOGLE ADS KAMPAGNE PRO ANBIETER
+ * =========================================================
+ * Dauerhafte Zuordnung zwischen Shopify-Anbieter
+ * und Google Ads-Kampagne.
+ *
+ * Monatsbudgets werden weiterhin separat über
+ * AdsVendorAllocation verwaltet.
+ */
+
+model AdsVendorCampaign {
+  id String @id @default(cuid())
+
+  // Shopify-Kunde / Anbieter
+  customerId String @unique
+
+  // Ausschließlich Marktblatt.online
+  // Google Ads Kundennummer: 2908836119
+  googleAdsCustomerId String @default("2908836119")
+
+  // Google Ads Kampagnen-ID
+  // Null, solange noch keine Kampagne erstellt wurde.
+  googleCampaignId String? @unique
+
+  // Interner Status, unabhängig vom Google Ads Status
+  // pending, active, paused, error
+  status String @default("pending")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
