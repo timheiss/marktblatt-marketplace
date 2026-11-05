@@ -340,3 +340,41 @@ export function buildMarktblattVendorCampaignName(customerId) {
 
   return `Marktblatt | ${normalizedId}`;
 }
+
+/**
+ * Bereitet eine pausierte Google-Suchkampagne vor.
+ *
+ * Keine Google Ads API-Anfrage.
+ * Keine Datenbankänderung.
+ */
+export function prepareMarktblattSearchCampaign({
+  customerId,
+  googleAdsCustomerId,
+  dailyBudgetMicros,
+}) {
+  const accountId = assertMarktblattGoogleAdsCustomer(
+    googleAdsCustomerId
+  );
+
+  const campaignName =
+    buildMarktblattVendorCampaignName(customerId);
+
+  if (
+    !Number.isSafeInteger(dailyBudgetMicros) ||
+    dailyBudgetMicros <= 0 ||
+    dailyBudgetMicros % 10000 !== 0
+  ) {
+    throw new Error(
+      "Google Ads: Ungültiges oder aufgebrauchtes Tagesbudget."
+    );
+  }
+
+  return {
+    googleAdsCustomerId: accountId,
+    customerId: customerId.trim(),
+    campaignName,
+    advertisingChannelType: "SEARCH",
+    status: "PAUSED",
+    dailyBudgetMicros,
+  };
+}
