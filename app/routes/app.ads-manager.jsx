@@ -105,10 +105,15 @@ export const loader = async ({ request }) => {
       );
 
       googleAdsAccountDetails = await Promise.all(
-        googleAdsAccounts.map(async (resourceName) => {
-          const customerId = resourceName.split("/")[1];
+googleAdsAccounts
+  .filter(
+    (resourceName) =>
+      resourceName.split("/")[1] !== "7243645600"
+  )
+  .map(async (resourceName) => {
+    const customerId = resourceName.split("/")[1];
 
-          try {
+    try {
             return await getGoogleAdsAccountDetails(
               session.shop,
               customerId
