@@ -202,8 +202,7 @@ const [
   currentMonthlyBudgets,
   nextMonthlyBudgets,
     vendorCampaigns,
-] =
-  await Promise.all([
+] = await Promise.all([
     prisma.adsPackageBudget.findMany(),
 
     prisma.subscription.findMany({
@@ -273,6 +272,14 @@ const [
         })(),
       },
     }),
+prisma.adsVendorCampaign.findMany({
+  select: {
+    customerId: true,
+    googleAdsCustomerId: true,
+    googleCampaignId: true,
+    status: true,
+  },
+}),
   ]);
 
 const verifiedCustomerIds = new Set(
@@ -454,14 +461,7 @@ if (intent === "allocate-monthly-budgets") {
         distinct: ["customerId"],
       }),
 
-    prisma.adsVendorCampaign.findMany({
-      select: {
-        customerId: true,
-        googleAdsCustomerId: true,
-        googleCampaignId: true,
-        status: true,
-      },
-    }),
+
 
     ]);
 
