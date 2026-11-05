@@ -185,7 +185,6 @@ export async function listGoogleAdsManagerAccounts(shop) {
   }
 
   const data = await response.json();
-console.log("Google Ads MCC API-Ergebnis:", JSON.stringify(data));
 
   return (data.results ?? [])
     .map((result) => result.customerClient)
@@ -198,3 +197,36 @@ console.log("Google Ads MCC API-Ergebnis:", JSON.stringify(data));
       currency: account.currencyCode ?? "",
     }));
 }
+
+
+/**
+ * Ausschließlich dieses Google Ads Konto darf für
+ * zukünftige Kampagnenänderungen verwendet werden.
+ */
+export const MARKTBLATT_GOOGLE_ADS_CUSTOMER_ID = "2908836119";
+
+export const MARKTBLATT_GOOGLE_ADS_MANAGER_ID = "7812981703";
+
+/**
+ * Zentrale Sicherheitsprüfung für schreibende
+ * Google Ads API-Funktionen.
+ *
+ * Wirft einen Fehler, wenn ein anderes Konto
+ * als Marktblatt.online angesprochen wird.
+ */
+export function assertMarktblattGoogleAdsCustomer(customerId) {
+  const normalizedId = String(customerId ?? "")
+    .replace(/-/g, "");
+
+  if (
+    normalizedId !== MARKTBLATT_GOOGLE_ADS_CUSTOMER_ID
+  ) {
+    throw new Error(
+      "Google Ads: Kampagnenänderungen sind ausschließlich " +
+      "für das Marktblatt.online-Werbekonto erlaubt."
+    );
+  }
+
+  return normalizedId;
+}
+
