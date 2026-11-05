@@ -288,7 +288,7 @@ export async function listMarktblattGoogleAdsCampaigns(shop) {
         "login-customer-id": MARKTBLATT_GOOGLE_ADS_MANAGER_ID,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ query, pageSize: 1000 }),
+body: JSON.stringify({ query }),
       signal: AbortSignal.timeout(15000),
     }
   );
