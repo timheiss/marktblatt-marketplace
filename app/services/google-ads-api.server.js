@@ -378,3 +378,82 @@ export function prepareMarktblattSearchCampaign({
     dailyBudgetMicros,
   };
 }
+
+/**
+ * Prüft, ob für einen Anbieter bereits eine
+ * Google Ads-Kampagne vorhanden ist.
+ *
+ * Keine API-Anfrage.
+ * Keine Datenbankänderung.
+ */
+export function checkMarktblattVendorCampaignDuplicate({
+  customerId,
+  googleAdsCustomerId,
+  existingMapping,
+  googleAdsCampaigns,
+}) {
+  const accountId = assertMarktblattGoogleAdsCustomer(
+    googleAdsCustomerId
+  );
+
+  const campaignName =
+    buildMarktblattVendorCampaignName(customerId);
+
+  if (!Array.isArray(googleAdsCampaigns)) {
+    throw new Error(
+      "Google Ads: Kampagnenliste nicht verfügbar."
+    );
+  }
+
+  if (
+    existingMapping &&
+    existingMapping.customerId !== customerId
+  ) {
+    throw new Error(
+      "Google Ads: Anbieter-Zuordnung stimmt nicht überein."
+    );
+  }
+
+  if (
+    existingMapping &&
+    existingMapping.googleAdsCustomerId !== accountId
+  ) {
+    throw new Error(
+      "Google Ads: Anbieter-Zuordnung gehört zu einem anderen Werbekonto."
+    );
+  }
+
+  const mappedCampaignId =
+    existingMapping?.googleCampaignId;
+
+  if (mappedCampaignId) {
+    return {
+      canCreate: false,
+      reason: "database_mapping_exists",
+      campaignId: String(mappedCampaignId),
+      campaignName,
+    };
+  }
+
+  const existingCampaign = googleAdsCampaigns.find(
+    (campaign) =>
+      campaign.name === campaignName &&
+      campaign.status !== "REMOVED"
+  );
+
+  if (existingCampaign) {
+    return {
+      canCreate: false,
+      reason: "google_campaign_exists",
+      campaignId: String(existingCampaign.id),
+      campaignName,
+    };
+  }
+
+  return {
+    canCreate: true,
+    reason: "no_duplicate_found",
+    campaignId: null,
+    campaignName,
+  };
+}
