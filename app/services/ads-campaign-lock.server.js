@@ -119,3 +119,65 @@ export async function markAdsCampaignReconciliationRequired({
         : "unchanged",
   };
 }
+
+
+/**
+ * Bestätigt eine erfolgreich erstellte und bei Google Ads
+ * bereits pausierte Kampagne in der Marktblatt-Datenbank.
+ *
+ * Keine Google Ads API-Anfrage.
+ */
+export async function confirmAdsCampaignCreation({
+  customerId,
+  googleAdsCustomerId,
+  creationToken,
+  googleCampaignId,
+}) {
+  const accountId =
+    assertMarktblattGoogleAdsCustomer(googleAdsCustomerId);
+
+  buildMarktblattVendorCampaignName(customerId);
+
+  if (
+    typeof creationToken !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      creationToken
+    )
+  ) {
+    throw new Error(
+      "Google Ads: Ungültiger Erstellungstoken."
+    );
+  }
+
+  const campaignId = String(googleCampaignId ?? "");
+
+  if (!/^[1-9]\d*$/.test(campaignId)) {
+    throw new Error(
+      "Google Ads: Ungültige Kampagnen-ID."
+    );
+  }
+
+  const result = await prisma.adsVendorCampaign.updateMany({
+    where: {
+      customerId,
+      googleAdsCustomerId: accountId,
+      googleCampaignId: null,
+      status: "creating",
+      creationToken,
+    },
+    data: {
+      googleCampaignId: campaignId,
+      status: "paused",
+      creationError: null,
+    },
+  });
+
+  return {
+    confirmed: result.count === 1,
+    customerId,
+    googleAdsCustomerId: accountId,
+    googleCampaignId:
+      result.count === 1 ? campaignId : null,
+    status: result.count === 1 ? "paused" : "unchanged",
+  };
+}
