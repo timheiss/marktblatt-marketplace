@@ -512,7 +512,17 @@ model AdsVendorCampaign {
 
   // Interner Status, unabhängig vom Google Ads Status
   // pending, active, paused, error
+  // Interner Status:
+  // pending, creating, active, paused, error,
+  // reconciliation_required
   status String @default("pending")
+
+  // Sperre für gleichzeitige Kampagnenerstellungen
+  creationToken String? @unique
+  creationStartedAt DateTime?
+
+  // Fehler beim Erstellungsversuch
+  creationError String? @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
