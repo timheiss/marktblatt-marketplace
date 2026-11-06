@@ -10,6 +10,7 @@ import {
   getGoogleAdsAccountDetails,
   listGoogleAdsManagerAccounts,
   listMarktblattGoogleAdsCampaigns,
+  listAllMarktblattGoogleAdsCampaigns,
 } from "../services/google-ads-api.server";
 
 const PACKAGES = [
@@ -162,6 +163,26 @@ googleAdsAccounts
 
       googleAdsCampaignsError =
         "Die Marktblatt-Kampagnen konnten nicht geladen werden.";
+    }
+  }
+
+  // Vollständige Kampagnenliste für den Duplikatschutz.
+  // Keine Änderungen an Google Ads.
+  let allGoogleAdsCampaigns = [];
+  let allGoogleAdsCampaignsError = null;
+
+  if (googleAdsConnected) {
+    try {
+      allGoogleAdsCampaigns =
+        await listAllMarktblattGoogleAdsCampaigns(session.shop);
+    } catch (error) {
+      console.error(
+        "Google Ads vollständige Kampagnenabfrage fehlgeschlagen:",
+        error.message
+      );
+
+      allGoogleAdsCampaignsError =
+        "Die vollständige Kampagnenprüfung ist nicht verfügbar.";
     }
   }
 
@@ -772,6 +793,8 @@ export default function AdsManager() {
     combinedGoogleAdsAccounts,
     googleAdsCampaigns,
     googleAdsCampaignsError,
+    allGoogleAdsCampaigns,
+    allGoogleAdsCampaignsError,
     vendorCampaigns,
   } = useLoaderData();
 
