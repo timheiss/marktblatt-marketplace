@@ -59,3 +59,63 @@ export async function acquireAdsCampaignCreationLock({
     creationStartedAt,
   };
 }
+
+
+/**
+ * Markiert einen Kampagnenerstellungsversuch als ungeklärt.
+ *
+ * Eine erneute Erstellung bleibt gesperrt, bis der
+ * Google Ads-Bestand kontrolliert wurde.
+ *
+ * Keine Google Ads API-Anfrage.
+ */
+export async function markAdsCampaignReconciliationRequired({
+  customerId,
+  googleAdsCustomerId,
+  creationToken,
+  errorMessage,
+}) {
+  const accountId =
+    assertMarktblattGoogleAdsCustomer(googleAdsCustomerId);
+
+  buildMarktblattVendorCampaignName(customerId);
+
+  if (
+    typeof creationToken !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      creationToken
+    )
+  ) {
+    throw new Error(
+      "Google Ads: Ungültiger Erstellungstoken."
+    );
+  }
+
+  const safeErrorMessage =
+    typeof errorMessage === "string"
+      ? errorMessage.slice(0, 1000)
+      : "Erstellungsergebnis konnte nicht bestätigt werden.";
+
+  const result = await prisma.adsVendorCampaign.updateMany({
+    where: {
+      customerId,
+      googleAdsCustomerId: accountId,
+      googleCampaignId: null,
+      status: "creating",
+      creationToken,
+    },
+    data: {
+      status: "reconciliation_required",
+      creationError: safeErrorMessage,
+    },
+  });
+
+  return {
+    updated: result.count === 1,
+    customerId,
+    status:
+      result.count === 1
+        ? "reconciliation_required"
+        : "unchanged",
+  };
+}
