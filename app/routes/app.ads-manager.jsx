@@ -11,6 +11,7 @@ import {
   listGoogleAdsManagerAccounts,
   listMarktblattGoogleAdsCampaigns,
   listAllMarktblattGoogleAdsCampaigns,
+  checkMarktblattVendorCampaignDuplicate,
 } from "../services/google-ads-api.server";
 
 const PACKAGES = [
@@ -303,6 +304,50 @@ prisma.adsVendorCampaign.findMany({
 }),
   ]);
 
+
+  // Anbieterzuordnungen mit vollständigen Google Ads-Daten prüfen.
+  // Ausschließlich lesende Prüfung.
+  const vendorCampaignChecks = vendorCampaigns.map((vendor) => {
+    if (!googleAdsConnected || allGoogleAdsCampaignsError) {
+      return {
+        customerId: vendor.customerId,
+        status: "error",
+        reason: "google_ads_unavailable",
+        campaignId: null,
+      };
+    }
+
+    try {
+      const result = checkMarktblattVendorCampaignDuplicate({
+        customerId: vendor.customerId,
+        googleAdsCustomerId: vendor.googleAdsCustomerId,
+        existingMapping: vendor,
+        googleAdsCampaigns: allGoogleAdsCampaigns,
+      });
+
+      return {
+        customerId: vendor.customerId,
+        status: result.canCreate ? "ready" : "blocked",
+        reason: result.reason,
+        campaignId: result.campaignId,
+      };
+    } catch (error) {
+      console.error(
+        "Anbieter-Kampagnenprüfung fehlgeschlagen:",
+        vendor.customerId,
+        error.message
+      );
+
+      return {
+        customerId: vendor.customerId,
+        status: "error",
+        reason: "validation_failed",
+        campaignId: null,
+      };
+    }
+  });
+
+
 const verifiedCustomerIds = new Set(
   verifiedProfiles.map((profile) => profile.customerId)
 );
@@ -379,6 +424,7 @@ return {
   const currentlyEligibleAllocations =
     monthlyAllocations.filter((allocation) =>
       eligibleCustomerIds.has(allocation.customerId)
+
     );
 
   return {
@@ -393,6 +439,7 @@ return {
     googleAdsCampaigns,
     googleAdsCampaignsError,
     vendorCampaigns,
+    vendorCampaignChecks,
     budgetMonth: (() => {
       const [year, month] = getBerlinMonthInfo()
         .month.split("-")
@@ -796,6 +843,7 @@ export default function AdsManager() {
     allGoogleAdsCampaigns,
     allGoogleAdsCampaignsError,
     vendorCampaigns,
+    vendorCampaignChecks,
   } = useLoaderData();
 
   const fetcher = useFetcher();
@@ -1488,6 +1536,7 @@ googleOAuthFetcher.submit(formData, {
         <s-table-header>Google Ads Konto</s-table-header>
         <s-table-header>Kampagnen-ID</s-table-header>
         <s-table-header>Status</s-table-header>
+<s-table-header>Duplikatprüfung</s-table-header>
       </s-table-header-row>
 
       <s-table-body>
@@ -1499,6 +1548,31 @@ googleOAuthFetcher.submit(formData, {
               {vendor.googleCampaignId ?? "Noch nicht zugeordnet"}
             </s-table-cell>
             <s-table-cell>{vendor.status}</s-table-cell>
+
+<s-table-cell>
+  {(() => {
+    const check = vendorCampaignChecks.find(
+      (item) => item.customerId === vendor.customerId
+    );
+
+    if (!check || check.status === "error") {
+      return "Prüfung fehlgeschlagen";
+    }
+
+    if (check.status === "blocked") {
+      return check.reason === "database_mapping_exists"
+        ? "Bereits in Datenbank zugeordnet"
+        : "Kampagne bereits bei Google Ads vorhanden";
+    }
+
+    if (check.status === "ready") {
+      return "Keine Kampagne gefunden";
+    }
+
+    return "Prüfung fehlgeschlagen";
+  })()}
+</s-table-cell>
+
           </s-table-row>
         ))}
       </s-table-body>
