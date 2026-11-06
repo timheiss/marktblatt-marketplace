@@ -457,3 +457,133 @@ export function checkMarktblattVendorCampaignDuplicate({
     campaignName,
   };
 }
+
+
+/**
+ * Liest alle nicht entfernten Kampagnen des
+ * Marktblatt-Werbekontos, ohne Datumsfilter.
+ *
+ * Berücksichtigt alle Ergebnisseiten.
+ * Nur lesender Google Ads API-Zugriff.
+ */
+export async function listAllMarktblattGoogleAdsCampaigns(shop) {
+  const customerId = assertMarktblattGoogleAdsCustomer(
+    MARKTBLATT_GOOGLE_ADS_CUSTOMER_ID
+  );
+
+  const connection = await prisma.googleAdsConnection.findUnique({
+    where: { shop },
+    select: {
+      encryptedRefreshToken: true,
+      status: true,
+    },
+  });
+
+  if (
+    connection?.status !== "connected" ||
+    !connection.encryptedRefreshToken
+  ) {
+    throw new Error(
+      "Google Ads: Keine aktive Verbindung vorhanden."
+    );
+  }
+
+  const refreshToken = decryptGoogleToken(
+    connection.encryptedRefreshToken
+  );
+
+  const accessToken = await refreshGoogleOAuthAccessToken(
+    refreshToken
+  );
+
+  const query = `
+    SELECT
+      campaign.id,
+      campaign.name,
+      campaign.status,
+      campaign.advertising_channel_type
+    FROM campaign
+    WHERE campaign.status != 'REMOVED'
+    ORDER BY campaign.id
+  `;
+
+  const campaigns = [];
+  const seenPageTokens = new Set();
+  let pageToken = null;
+
+  do {
+    const response = await fetch(
+      `https://googleads.googleapis.com/v25/customers/${customerId}/googleAds:search`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "login-customer-id": MARKTBLATT_GOOGLE_ADS_MANAGER_ID,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query,
+          ...(pageToken ? { pageToken } : {}),
+        }),
+        signal: AbortSignal.timeout(15000),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+
+      console.error(
+        "Google Ads vollständige Kampagnenabfrage:",
+        response.status,
+        errorText.slice(0, 1500)
+      );
+
+      throw new Error(
+        `Google Ads: Vollständige Kampagnenabfrage fehlgeschlagen (HTTP ${response.status}).`
+      );
+    }
+
+    const data = await response.json();
+
+    if (!Array.isArray(data.results)) {
+      throw new Error(
+        "Google Ads: Ungültige Kampagnenantwort."
+      );
+    }
+
+    for (const result of data.results) {
+      const campaign = result.campaign;
+
+      if (
+        !campaign?.id ||
+        typeof campaign.name !== "string" ||
+        !campaign.status
+      ) {
+        throw new Error(
+          "Google Ads: Unvollständige Kampagnendaten."
+        );
+      }
+
+      campaigns.push({
+        id: String(campaign.id),
+        name: campaign.name,
+        status: campaign.status,
+        type: campaign.advertisingChannelType ?? "UNKNOWN",
+      });
+    }
+
+    pageToken = data.nextPageToken || null;
+
+    if (pageToken) {
+      if (seenPageTokens.has(pageToken)) {
+        throw new Error(
+          "Google Ads: Wiederholter Seiten-Token."
+        );
+      }
+
+      seenPageTokens.add(pageToken);
+    }
+  } while (pageToken);
+
+  return campaigns;
+}
