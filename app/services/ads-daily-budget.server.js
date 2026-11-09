@@ -70,5 +70,6 @@ export function calculateVendorDailyBudget({
     dailyBudgetCents,
     dailyBudgetMicros: dailyBudgetCents * 10000,
     budgetExhausted: remainingBudgetCents === 0,
+canCreateCampaign: dailyBudgetCents > 0,
   };
 }

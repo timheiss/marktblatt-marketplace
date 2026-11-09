@@ -5,6 +5,7 @@ import { useLoaderData, useFetcher } from "react-router";
 import { authenticateAdsAdmin } from "../services/ads-admin-auth.server";
 import prisma from "../db.server";
 import { ensureMonthlyPackageBudgets } from "../services/ads-monthly-budget.server";
+import { calculateVendorDailyBudget } from "../services/ads-daily-budget.server";
 import {
   listGoogleAdsAccounts,
   getGoogleAdsAccountDetails,
@@ -12,6 +13,7 @@ import {
   listMarktblattGoogleAdsCampaigns,
   listAllMarktblattGoogleAdsCampaigns,
   checkMarktblattVendorCampaignDuplicate,
+  prepareMarktblattSearchCampaign,
 } from "../services/google-ads-api.server";
 
 const PACKAGES = [
@@ -421,14 +423,100 @@ return {
     )
   );
 
-  const currentlyEligibleAllocations =
-    monthlyAllocations.filter((allocation) =>
-      eligibleCustomerIds.has(allocation.customerId)
+const currentlyEligibleAllocations =
+  monthlyAllocations.filter((allocation) =>
+    eligibleCustomerIds.has(allocation.customerId)
+  );
 
+// Tagesbudgets für aktuell berechtigte Anbieter berechnen.
+// Ausschließlich lesende Vorbereitung, keine Google Ads Änderungen.
+const vendorDailyBudgets = currentlyEligibleAllocations.map(
+  (allocation) => {
+    const budget = calculateVendorDailyBudget({
+      allocatedBudgetCents: allocation.allocatedBudgetCents,
+      spentBudgetCents: allocation.spentBudgetCents,
+    });
+
+    return {
+      customerId: allocation.customerId,
+      package: allocation.package,
+      allocatedBudgetCents: allocation.allocatedBudgetCents,
+      spentBudgetCents: allocation.spentBudgetCents,
+      ...budget,
+
+      // Solange Google Ads Ausgaben nicht zuverlässig
+      // synchronisiert werden, keine Erstellung freigeben.
+      campaignCreationEnabled: false,
+    };
+  }
     );
 
-  return {
-    packages,
+
+  // Kampagnenentwürfe ausschließlich im Arbeitsspeicher erstellen.
+  // Keine Google Ads API-Schreibzugriffe oder Datenbankänderungen.
+  const vendorCampaignDrafts = vendorDailyBudgets.map((budget) => {
+    const existingMapping = vendorCampaigns.find(
+      (campaign) => campaign.customerId === budget.customerId
+    );
+
+    const blocked = (reason) => ({
+      customerId: budget.customerId,
+      canPrepare: false,
+      reason,
+      campaign: null,
+    });
+
+    if (!googleAdsConnected || allGoogleAdsCampaignsError) {
+      return blocked("google_ads_unavailable");
+    }
+
+    if (existingMapping) {
+      return blocked("database_mapping_exists");
+    }
+
+    if (!budget.canCreateCampaign) {
+      return blocked("insufficient_daily_budget");
+    }
+
+    try {
+      const duplicateCheck = checkMarktblattVendorCampaignDuplicate({
+        customerId: budget.customerId,
+        googleAdsCustomerId: "2908836119",
+        existingMapping: null,
+        googleAdsCampaigns: allGoogleAdsCampaigns,
+      });
+
+      if (!duplicateCheck.canCreate) {
+        return blocked(duplicateCheck.reason);
+      }
+
+      const campaign = prepareMarktblattSearchCampaign({
+        customerId: budget.customerId,
+        googleAdsCustomerId: "2908836119",
+        dailyBudgetMicros: budget.dailyBudgetMicros,
+      });
+
+      return {
+        customerId: budget.customerId,
+        canPrepare: true,
+        reason: "draft_prepared",
+        campaign,
+      };
+    } catch (error) {
+      console.error(
+        "Kampagnenvorbereitung fehlgeschlagen:",
+        budget.customerId,
+        error.message
+      );
+
+      return blocked("preparation_failed");
+    }
+  });
+
+return {
+  packages,
+  vendorDailyBudgets,
+  vendorCampaignDrafts,
     googleAdsConnected,
     googleAdsAccounts,
     googleAdsAccountDetails,
@@ -844,6 +932,8 @@ export default function AdsManager() {
     allGoogleAdsCampaignsError,
     vendorCampaigns,
     vendorCampaignChecks,
+    vendorDailyBudgets,
+    vendorCampaignDrafts,
   } = useLoaderData();
 
   const fetcher = useFetcher();
@@ -1588,6 +1678,80 @@ googleOAuthFetcher.submit(formData, {
     Es werden keine Google Ads-Kampagnen verändert.
   </s-paragraph>
 </s-section>
+
+
+  <s-section heading="Vorbereitete Anbieter-Kampagnen">
+    <s-paragraph>
+      Vorschau der geplanten Google Ads-Suchkampagnen.
+      Alle Kampagnen starten pausiert. Es werden
+      keine Kampagnen erstellt oder verändert.
+    </s-paragraph>
+
+    {vendorCampaignDrafts.length > 0 ? (
+      <s-table>
+        <s-table-header-row>
+          <s-table-header>Anbieter-ID</s-table-header>
+          <s-table-header>Kampagnenname</s-table-header>
+          <s-table-header>Tagesbudget</s-table-header>
+          <s-table-header>Typ</s-table-header>
+          <s-table-header>Status</s-table-header>
+        </s-table-header-row>
+
+        <s-table-body>
+          {vendorCampaignDrafts.map((draft) => {
+            const budget = vendorDailyBudgets.find(
+              (item) => item.customerId === draft.customerId
+            );
+
+            const statusLabels = {
+              draft_prepared: "Entwurf bereit",
+              google_ads_unavailable: "Google Ads nicht verfügbar",
+              database_mapping_exists: "Zuordnung bereits vorhanden",
+              insufficient_daily_budget: "Tagesbudget nicht ausreichend",
+              google_campaign_exists: "Kampagne bereits vorhanden",
+              preparation_failed: "Vorbereitung fehlgeschlagen",
+            };
+
+            return (
+              <s-table-row key={draft.customerId}>
+                <s-table-cell>{draft.customerId}</s-table-cell>
+
+                <s-table-cell>
+                  {draft.campaign?.campaignName ?? "—"}
+                </s-table-cell>
+
+                <s-table-cell>
+                  {budget
+                    ? formatEuro(budget.dailyBudgetCents)
+                    : "—"}
+                </s-table-cell>
+
+                <s-table-cell>
+                  {draft.campaign?.advertisingChannelType ?? "—"}
+                </s-table-cell>
+
+                <s-table-cell>
+                  {statusLabels[draft.reason] ??
+                    "Prüfung erforderlich"}
+                </s-table-cell>
+              </s-table-row>
+            );
+          })}
+        </s-table-body>
+      </s-table>
+    ) : (
+      <s-paragraph>
+        Aktuell sind keine Kampagnenentwürfe vorhanden.
+      </s-paragraph>
+    )}
+
+    <s-paragraph>
+      Hinweis: Diese Vorschau ist keine Freigabe zur
+      Kampagnenerstellung. Die tatsächlichen Google Ads-Ausgaben
+      müssen vor einer Aktivierung synchronisiert werden.
+    </s-paragraph>
+  </s-section>
+
 
 <s-section heading="Google Ads Verbindung">
   {googleAdsConnected ? (
