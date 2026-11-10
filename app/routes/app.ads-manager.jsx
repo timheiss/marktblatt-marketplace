@@ -470,9 +470,17 @@ const vendorDailyBudgets = currentlyEligibleAllocations.map(
       return blocked("google_ads_unavailable");
     }
 
-    if (existingMapping) {
-      return blocked("database_mapping_exists");
-    }
+// Nur eine noch nicht gestartete Zuordnung darf
+// für die reine Kampagnenvorschau verwendet werden.
+if (
+  existingMapping &&
+  (
+    existingMapping.status !== "pending" ||
+    existingMapping.googleCampaignId !== null
+  )
+) {
+  return blocked("database_mapping_exists");
+}
 
     if (!budget.canCreateCampaign) {
       return blocked("insufficient_daily_budget");
@@ -482,7 +490,7 @@ const vendorDailyBudgets = currentlyEligibleAllocations.map(
       const duplicateCheck = checkMarktblattVendorCampaignDuplicate({
         customerId: budget.customerId,
         googleAdsCustomerId: "2908836119",
-        existingMapping: null,
+existingMapping: existingMapping ?? null,
         googleAdsCampaigns: allGoogleAdsCampaigns,
       });
 
@@ -496,12 +504,13 @@ const vendorDailyBudgets = currentlyEligibleAllocations.map(
         dailyBudgetMicros: budget.dailyBudgetMicros,
       });
 
-      return {
-        customerId: budget.customerId,
-        canPrepare: true,
-        reason: "draft_prepared",
-        campaign,
-      };
+return {
+  customerId: budget.customerId,
+  canPrepare: true,
+  reason: "draft_prepared",
+  campaign,
+  existingMappingStatus: existingMapping?.status ?? null,
+};
     } catch (error) {
       console.error(
         "Kampagnenvorbereitung fehlgeschlagen:",
