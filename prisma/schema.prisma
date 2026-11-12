@@ -96,6 +96,14 @@ model VendorProfile {
 
   companyDescription String?
 
+// Herkunft der meisten versendeten Produkte.
+// ISO-Ländercode oder definierter Kontinentcode.
+shippingOrigin String?
+
+// Länder, in die der Anbieter verkauft und liefert.
+// ISO-3166-1-Alpha-2-Codes, z. B. DE, AT, FR.
+salesCountries String[] @default([])
+
   // Shopify File GID des Hintergrundbildes.
   // Beispiel:
   // gid://shopify/MediaImage/123456789

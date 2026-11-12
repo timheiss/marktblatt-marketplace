@@ -1,4 +1,5 @@
 import db from "../db.server";
+import countries from "i18n-iso-countries";
 import { authenticate } from "../shopify.server";
 
 /*
@@ -81,6 +82,12 @@ function formatProfile(profile) {
   return {
     companyDescription:
       profile?.companyDescription ?? "",
+
+shippingOrigin:
+  profile?.shippingOrigin ?? "",
+
+salesCountries:
+  profile?.salesCountries ?? [],
 
     backgroundImageId:
       profile?.backgroundImageId ?? null,
@@ -301,9 +308,63 @@ export const action = async ({ request }) => {
     const companyDescription =
       optionalText(
         profile.companyDescription,
-        5000
+        800
       );
 
+const EUROPEAN_COUNTRIES = new Set([
+  "AL", "AD", "AT", "BY", "BE", "BA", "BG",
+  "HR", "CY", "CZ", "DK", "EE", "FI", "FR",
+  "DE", "GR", "HU", "IS", "IE", "IT", "XK",
+  "LV", "LI", "LT", "LU", "MT", "MD", "MC",
+  "ME", "NL", "MK", "NO", "PL", "PT", "RO",
+  "RU", "SM", "RS", "SK", "SI", "ES", "SE",
+  "CH", "TR", "UA", "GB", "VA", "GE",
+  "AM", "AZ"
+]);
+
+const CONTINENTS = new Set([
+  "EUROPE",
+  "ASIA",
+  "AFRICA",
+  "NORTH_AMERICA",
+  "SOUTH_AMERICA",
+  "OCEANIA"
+]);
+
+const shippingOrigin =
+  String(profile.shippingOrigin ?? "")
+    .trim()
+    .toUpperCase();
+
+const salesCountries =
+  profile.salesCountries ?? [];
+
+if (
+  shippingOrigin &&
+  !countries.isValid(shippingOrigin) &&
+  !CONTINENTS.has(shippingOrigin)
+) {
+  return cors(Response.json({
+    success: false,
+    error: "Ungültiges Versandland oder Kontinent."
+  }, { status: 400 }));
+}
+
+if (
+  !Array.isArray(salesCountries) ||
+  salesCountries.some(
+    (country) =>
+      typeof country !== "string" ||
+      !EUROPEAN_COUNTRIES.has(country)
+  )
+) {
+  return cors(Response.json({
+    success: false,
+    error: "Ungültige Verkaufsländer ausgewählt."
+  }, { status: 400 }));
+}
+
+const uniqueSalesCountries = [...new Set(salesCountries)];
 
     /*
      * =====================================================
@@ -474,6 +535,8 @@ const savedProfile =
 create: {
   customerId,
   companyDescription,
+  shippingOrigin: shippingOrigin || null,
+  salesCountries: uniqueSalesCountries,
   discountCode,
   discountPercent,
   discountMinimumOrderValue,
@@ -490,20 +553,61 @@ create: {
     },
 
 update: {
-  companyDescription,
-  discountCode,
-  discountPercent,
-  discountMinimumOrderValue,
-  deliveryTimeInfo,
+  ...(profile.companyDescription !== undefined
+    ? { companyDescription }
+    : {}),
 
-  homepageUrl,
-      imprintUrl,
-      withdrawalUrl,
+  ...(profile.shippingOrigin !== undefined
+    ? { shippingOrigin: shippingOrigin || null }
+    : {}),
 
-      facebookUrl,
-      instagramUrl,
-      tiktokUrl,
-      youtubeUrl,
+  ...(profile.salesCountries !== undefined
+    ? { salesCountries: uniqueSalesCountries }
+    : {}),
+
+  ...(profile.discountCode !== undefined
+    ? { discountCode }
+    : {}),
+
+  ...(profile.discountPercent !== undefined
+    ? { discountPercent }
+    : {}),
+
+  ...(profile.discountMinimumOrderValue !== undefined
+    ? { discountMinimumOrderValue }
+    : {}),
+
+  ...(profile.deliveryTimeInfo !== undefined
+    ? { deliveryTimeInfo }
+    : {}),
+
+...(profile.homepageUrl !== undefined
+  ? { homepageUrl }
+  : {}),
+
+...(profile.imprintUrl !== undefined
+  ? { imprintUrl }
+  : {}),
+
+...(profile.withdrawalUrl !== undefined
+  ? { withdrawalUrl }
+  : {}),
+
+...(profile.facebookUrl !== undefined
+  ? { facebookUrl }
+  : {}),
+
+...(profile.instagramUrl !== undefined
+  ? { instagramUrl }
+  : {}),
+
+...(profile.tiktokUrl !== undefined
+  ? { tiktokUrl }
+  : {}),
+
+...(profile.youtubeUrl !== undefined
+  ? { youtubeUrl }
+  : {}),
     },
   });
 

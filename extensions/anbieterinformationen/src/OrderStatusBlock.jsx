@@ -1,6 +1,11 @@
 import '@shopify/ui-extensions/preact';
 import {render} from 'preact';
 import {useEffect, useState} from 'preact/hooks';
+import {
+  CONTINENT_OPTIONS,
+  SHIPPING_COUNTRY_OPTIONS,
+  EUROPEAN_COUNTRY_OPTIONS,
+} from './countries.js';
 
 const API_BASE_URL =
   'https://marktblatt-marketplace.onrender.com';
@@ -10,9 +15,13 @@ export default async () => {
 };
 
 function Extension() {
-  const [vendorProfile, setVendorProfile] = useState({
-    companyDescription: '',
-    backgroundImageId: null,
+const [showSalesCountries, setShowSalesCountries] =
+  useState(false);
+const [vendorProfile, setVendorProfile] = useState({
+  companyDescription: '',
+  shippingOrigin: '',
+  salesCountries: [],
+  backgroundImageId: null,
     discountCode: '',
     discountPercent: '',
     discountMinimumOrderValue: '',
@@ -76,11 +85,17 @@ const [
 
       const profile = data.profile || {};
 
-      setVendorProfile({
-        companyDescription:
-          profile.companyDescription || '',
-        backgroundImageId:
-          profile.backgroundImageId || null,
+setVendorProfile({
+  companyDescription:
+    profile.companyDescription || '',
+  shippingOrigin:
+    profile.shippingOrigin || '',
+  salesCountries:
+    Array.isArray(profile.salesCountries)
+      ? profile.salesCountries
+      : [],
+  backgroundImageId:
+    profile.backgroundImageId || null,
         discountCode:
           profile.discountCode || '',
         discountPercent:
@@ -230,6 +245,10 @@ const [
             profile: {
               companyDescription:
                 vendorProfile.companyDescription,
+    shippingOrigin:
+      vendorProfile.shippingOrigin,
+    salesCountries:
+      vendorProfile.salesCountries,
               discountCode:
                 vendorProfile.discountCode,
               discountPercent:
@@ -258,6 +277,12 @@ const [
         ...current,
         companyDescription:
           profile.companyDescription || '',
+  shippingOrigin:
+    profile.shippingOrigin || '',
+  salesCountries:
+    Array.isArray(profile.salesCountries)
+      ? profile.salesCountries
+      : [],
         backgroundImageId:
           profile.backgroundImageId || null,
         discountCode:
@@ -328,20 +353,124 @@ const [
             </s-text>
           ) : (
             <>
-              <s-text-field
-                label="Informationen über den Anbieter"
-                value={vendorProfile.companyDescription}
-                onInput={(event) =>
-                  setVendorProfile((current) => ({
-                    ...current,
-                    companyDescription: event.currentTarget.value,
-                  }))
-                }
-              />
+<s-text-area
+  label="Informationen über den Anbieter"
+  rows={5}
+  maxLength={800}
+  value={vendorProfile.companyDescription}
+  onInput={(event) =>
+    setVendorProfile((current) => ({
+      ...current,
+      companyDescription:
+        event.currentTarget.value.slice(0, 800),
+    }))
+  }
+/>
 
-              <s-text>
-                Beschreiben Sie Ihr Unternehmen und Ihre Angebote.
-              </s-text>
+<s-text>
+  Beschreiben Sie Ihr Unternehmen und Ihre Angebote.
+  Maximal 800 Zeichen.
+</s-text>
+
+<s-text>
+  {vendorProfile.companyDescription.length} / 800 Zeichen
+</s-text>
+
+
+<s-box paddingBlockStart="base">
+  <s-select
+    label="Versand aus"
+    value={vendorProfile.shippingOrigin}
+    onChange={(event) =>
+      setVendorProfile((current) => ({
+        ...current,
+        shippingOrigin: event.currentTarget.value,
+      }))
+    }
+  >
+    <s-option value="">
+      Bitte auswählen
+    </s-option>
+
+{CONTINENT_OPTIONS.map((continent) => (
+  <s-option
+    key={continent.value}
+    value={continent.value}
+  >
+    {continent.label}
+  </s-option>
+))}
+
+{SHIPPING_COUNTRY_OPTIONS.map((country) => (
+  <s-option
+    key={country.value}
+    value={country.value}
+  >
+    {country.label}
+  </s-option>
+))}
+  </s-select>
+</s-box>
+
+<s-text>
+  Wählen Sie das Land oder den Kontinent, aus dem
+  die meisten Ihrer Produkte versendet werden.
+</s-text>
+
+
+<s-box paddingBlockStart="base">
+  <s-text type="strong">
+    Versand / Verkauf in
+  </s-text>
+</s-box>
+
+<s-text>
+  Wählen Sie alle europäischen Länder aus, in die
+  Sie verkaufen und liefern.
+</s-text>
+
+<s-text>
+  {vendorProfile.salesCountries.length} Länder ausgewählt
+</s-text>
+
+<s-button
+  onClick={() => setShowSalesCountries((current) => !current)}
+>
+  {showSalesCountries
+    ? 'Auswahl schließen'
+    : 'Länder auswählen'}
+</s-button>
+
+{showSalesCountries && (
+
+<s-stack direction="block" gap="small">
+  {EUROPEAN_COUNTRY_OPTIONS.map((country) => (
+    <s-checkbox
+      key={country.value}
+      checked={vendorProfile.salesCountries.includes(
+        country.value
+      )}
+      onChange={(event) => {
+        const checked = event.currentTarget.checked;
+
+        setVendorProfile((current) => ({
+          ...current,
+          salesCountries: checked
+            ? [...new Set([
+                ...current.salesCountries,
+                country.value,
+              ])]
+            : current.salesCountries.filter(
+                (value) => value !== country.value
+              ),
+        }));
+      }}
+    >
+      {country.label}
+    </s-checkbox>
+  ))}
+</s-stack>
+)}
 
               <s-box paddingBlockStart="base">
                 <s-text type="strong">
