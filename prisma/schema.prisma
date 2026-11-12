@@ -529,3 +529,25 @@ model AdsVendorCampaign {
 
   @@index([status])
 }
+
+/**
+ * =========================================================
+ * MARKTBLATT KI ADS MANAGER – SICHERHEITSEINSTELLUNGEN
+ * =========================================================
+ *
+ * Zentraler Notfall-Stopp für automatisch verwaltete
+ * Google Ads-Kampagnen.
+ */
+model AdsManagerSettings {
+  id String @id @default("global")
+
+  // Sperrt Kampagnenaktivierungen und neue Erstellungen
+  emergencyStopEnabled Boolean @default(false)
+
+  // Informationen zum letzten Notfall-Stopp
+  activatedAt DateTime?
+  activatedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

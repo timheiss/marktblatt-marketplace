@@ -14,7 +14,12 @@ import {
   listAllMarktblattGoogleAdsCampaigns,
   checkMarktblattVendorCampaignDuplicate,
   prepareMarktblattSearchCampaign,
+  pauseMarktblattGoogleAdsCampaign,
 } from "../services/google-ads-api.server";
+import {
+  activateAdsEmergencyStop,
+  getAdsEmergencyStopStatus,
+} from "../services/ads-emergency-stop.server";
 
 const PACKAGES = [
   { name: "Starter", products: 10 },
@@ -66,6 +71,9 @@ function calculateProratedBudget(
 
 export const loader = async ({ request }) => {
   const { session } = await authenticateAdsAdmin(request);
+
+  // Zentralen Notfall-Status aus PostgreSQL lesen.
+  const adsEmergencyStop = await getAdsEmergencyStopStatus();
 
   const googleAdsConnection =
     await prisma.googleAdsConnection.findUnique({
@@ -526,6 +534,7 @@ return {
   packages,
   vendorDailyBudgets,
   vendorCampaignDrafts,
+  adsEmergencyStop,
     googleAdsConnected,
     googleAdsAccounts,
     googleAdsAccountDetails,
@@ -594,13 +603,88 @@ return {
   };
 };
 
-
 export const action = async ({ request }) => {
-await authenticateAdsAdmin(request);
+const { session } = await authenticateAdsAdmin(request);
+const shop = session.shop;
 
   const formData = await request.formData();
  
 const intent = formData.get("intent");
+
+if (intent === "activate-ads-emergency-stop") {
+  const administratorId = "authenticated-shopify-admin";
+
+  // Zuerst die dauerhafte Notfall-Sperre aktivieren.
+  await activateAdsEmergencyStop({
+    administratorId,
+  });
+
+  // Ausschließlich gespeicherte Marktblatt-Zuordnungen.
+  const campaigns = await prisma.adsVendorCampaign.findMany({
+    where: {
+      googleAdsCustomerId: "2908836119",
+      googleCampaignId: {
+        not: null,
+      },
+    },
+    select: {
+      customerId: true,
+      googleCampaignId: true,
+    },
+  });
+
+  const results = [];
+
+  for (const campaign of campaigns) {
+    try {
+      const result = await pauseMarktblattGoogleAdsCampaign({
+        shop,
+        customerId: campaign.customerId,
+        googleCampaignId: campaign.googleCampaignId,
+      });
+
+      results.push({
+        customerId: campaign.customerId,
+        campaignId: campaign.googleCampaignId,
+        success: true,
+        alreadyPaused: result.alreadyPaused,
+      });
+    } catch (error) {
+      console.error(
+        "Marktblatt Notfall-Stopp:",
+        campaign.customerId,
+        error
+      );
+
+      results.push({
+        customerId: campaign.customerId,
+        campaignId: campaign.googleCampaignId,
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+
+  const paused = results.filter(
+    (result) => result.success
+  ).length;
+
+  const failed = results.filter(
+    (result) => !result.success
+  ).length;
+
+  return {
+    success: failed === 0,
+    emergencyStopEnabled: true,
+    paused,
+    failed,
+    results,
+    message:
+      `Notfall-Sperre aktiviert. ` +
+      `${paused} Kampagnen pausiert oder bereits pausiert. ` +
+      `${failed} Fehler.`,
+  };
+}
 
 if (intent === "prepare-vendor-campaigns") {
   const [subscriptions, profiles, products] = await Promise.all([
@@ -943,10 +1027,52 @@ export default function AdsManager() {
     vendorCampaignChecks,
     vendorDailyBudgets,
     vendorCampaignDrafts,
+adsEmergencyStop,
   } = useLoaderData();
 
   const fetcher = useFetcher();
 const googleOAuthFetcher = useFetcher();
+const emergencyStopFetcher = useFetcher();
+
+const emergencyStopRunning =
+  emergencyStopFetcher.state !== "idle";
+
+const emergencyStopActive =
+  adsEmergencyStop.enabled ||
+  emergencyStopFetcher.data?.emergencyStopEnabled === true;
+
+const activateEmergencyStop = () => {
+  if (emergencyStopRunning) return;
+
+  const firstConfirmation = window.confirm(
+    "NOTFALL-STOPP\n\n" +
+    "Alle vom Marktblatt KI Ads Manager verwalteten " +
+    "Google Ads-Kampagnen sollen pausiert werden.\n\n" +
+    "Neue Kampagnenerstellungen werden gesperrt.\n\n" +
+    "Möchtest du fortfahren?"
+  );
+
+  if (!firstConfirmation) return;
+
+  const secondConfirmation = window.confirm(
+    "LETZTE BESTÄTIGUNG\n\n" +
+    "Der Notfall-Stopp wird dauerhaft aktiviert.\n\n" +
+    "Die manuell erstellten Google Ads-Kampagnen " +
+    "werden nicht berücksichtigt.\n\n" +
+    "NOTFALL-STOPP JETZT AUSLÖSEN?"
+  );
+
+  if (!secondConfirmation) return;
+
+  emergencyStopFetcher.submit(
+    {
+      intent: "activate-ads-emergency-stop",
+    },
+    {
+      method: "post",
+    }
+  );
+};
 const googleOAuthWindowRef = useRef(null);
 const googleOAuthHandledDataRef = useRef(null);
 
@@ -1794,14 +1920,91 @@ googleOAuthFetcher.submit(formData, {
     zunächst ausschließlich gelesen werden.
   </s-paragraph>
 
+<s-paragraph>
+  Die automatische Kampagnenerstellung und
+  -aktivierung ist derzeit deaktiviert.
+  Die Notfallsteuerung befindet sich im Aufbau.
+</s-paragraph>
+</s-section>
+
+<s-section heading="Google Ads – Notfallsteuerung">
+
   <s-paragraph>
-    Es werden noch keine Google Ads Kampagnen
-    erstellt, verändert oder gestartet.
+    Notfall-Status:{" "}
+    {adsEmergencyStop.enabled
+      ? "AKTIV – Kampagnenänderungen gesperrt"
+      : "INAKTIV – Keine Notfall-Sperre"}
   </s-paragraph>
+
+  {!adsEmergencyStop.initialized && (
+    <s-paragraph>
+      Die Notfallsteuerung ist noch nicht initialisiert.
+      Aus Sicherheitsgründen bleibt die Sperre aktiv.
+    </s-paragraph>
+  )}
+
+  <s-paragraph>
+    Mit dem Notfall-Stopp können alle vom Marktblatt
+    KI Ads Manager verwalteten Google Ads-Kampagnen
+    pausiert werden.
+  </s-paragraph>
+
+  <s-paragraph>
+    Die Notfall-Sperre verhindert außerdem neue
+    Kampagnenerstellungen und automatische Aktivierungen.
+    Manuell erstellte Google Ads-Kampagnen bleiben
+    unverändert.
+  </s-paragraph>
+
+<s-box paddingBlockStart="base">
+  <s-button
+    variant="primary"
+    tone="critical"
+    disabled={emergencyStopRunning}
+    onClick={activateEmergencyStop}
+  >
+    {emergencyStopRunning
+      ? "Notfall-Stopp wird ausgeführt..."
+      : emergencyStopActive
+        ? "Notfall-Stopp erneut ausführen"
+        : "NOTFALL-STOPP – Alle Kampagnen pausieren"}
+  </s-button>
+</s-box>
+
+{emergencyStopFetcher.data?.message && (
+  <s-paragraph>
+    {emergencyStopFetcher.data.message}
+  </s-paragraph>
+)}
+
+{emergencyStopFetcher.data?.emergencyStopEnabled && (
+  <s-paragraph>
+    Die dauerhafte Notfall-Sperre ist aktiviert.
+  </s-paragraph>
+)}
+
+{emergencyStopFetcher.data?.results?.map((result) => (
+  <s-paragraph key={`${result.customerId}-${result.campaignId}`}>
+    Kampagne {result.campaignId}:{" "}
+    {result.success
+      ? result.alreadyPaused
+        ? "Bereits pausiert"
+        : "Pausierung bestätigt"
+      : `Fehler: ${result.error}`}
+  </s-paragraph>
+))}
+
+{emergencyStopFetcher.state === "idle" &&
+  emergencyStopFetcher.data?.success === false && (
+    <s-paragraph>
+      Achtung: Mindestens eine Kampagne konnte nicht
+      erfolgreich pausiert oder überprüft werden.
+      Bitte die Ergebnisse kontrollieren.
+    </s-paragraph>
+  )}
 </s-section>
 
     </s-page>
   );
 }
-
         

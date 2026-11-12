@@ -5,6 +5,7 @@ import {
   assertMarktblattGoogleAdsCustomer,
   buildMarktblattVendorCampaignName,
 } from "./google-ads-api.server";
+import { assertAdsManagerNotStopped } from "./ads-emergency-stop.server";
 
 /**
  * Reserviert atomar das Recht, für einen Anbieter
@@ -16,6 +17,9 @@ export async function acquireAdsCampaignCreationLock({
   customerId,
   googleAdsCustomerId,
 }) {
+  // Keine neue Kampagnenerstellung bei aktivem Notfall-Stopp.
+  await assertAdsManagerNotStopped();
+
   const campaignName =
     buildMarktblattVendorCampaignName(customerId);
 

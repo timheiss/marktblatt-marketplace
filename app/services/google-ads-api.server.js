@@ -587,3 +587,141 @@ export async function listAllMarktblattGoogleAdsCampaigns(shop) {
 
   return campaigns;
 }
+
+/**
+ * Pausiert eine eindeutig zugeordnete Marktblatt-Kampagne.
+ * Keine Änderungen an fremden oder manuellen Kampagnen.
+ */
+export async function pauseMarktblattGoogleAdsCampaign({
+  shop,
+  customerId,
+  googleCampaignId,
+}) {
+  const accountId = assertMarktblattGoogleAdsCustomer(
+    MARKTBLATT_GOOGLE_ADS_CUSTOMER_ID
+  );
+
+  const campaignId = String(googleCampaignId ?? "");
+
+  if (!/^[1-9]\d*$/.test(campaignId)) {
+    throw new Error("Google Ads: Ungültige Kampagnen-ID.");
+  }
+
+  const expectedName = buildMarktblattVendorCampaignName(customerId);
+
+  const mapping = await prisma.adsVendorCampaign.findUnique({
+    where: { customerId },
+  });
+
+  if (
+    !mapping ||
+    mapping.googleAdsCustomerId !== accountId ||
+    mapping.googleCampaignId !== campaignId
+  ) {
+    throw new Error("Google Ads: Keine gültige Anbieterzuordnung.");
+  }
+
+  const campaigns = await listAllMarktblattGoogleAdsCampaigns(shop);
+
+  const campaign = campaigns.find(
+    (item) => item.id === campaignId
+  );
+
+  if (!campaign || campaign.name !== expectedName) {
+    throw new Error(
+      "Google Ads: Kampagnenname oder Zuordnung stimmt nicht überein."
+    );
+  }
+
+  if (campaign.status === "PAUSED") {
+    return {
+      success: true,
+      campaignId,
+      alreadyPaused: true,
+    };
+  }
+
+  const connection = await prisma.googleAdsConnection.findUnique({
+    where: { shop },
+    select: {
+      encryptedRefreshToken: true,
+      status: true,
+    },
+  });
+
+  if (
+    connection?.status !== "connected" ||
+    !connection.encryptedRefreshToken
+  ) {
+    throw new Error("Google Ads: Keine aktive Verbindung vorhanden.");
+  }
+
+  const refreshToken = decryptGoogleToken(
+    connection.encryptedRefreshToken
+  );
+
+  const accessToken = await refreshGoogleOAuthAccessToken(refreshToken);
+
+  const response = await fetch(
+    `https://googleads.googleapis.com/v25/customers/${accountId}/campaigns:mutate`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "login-customer-id": MARKTBLATT_GOOGLE_ADS_MANAGER_ID,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        operations: [
+          {
+            update: {
+              resourceName: `customers/${accountId}/campaigns/${campaignId}`,
+              status: "PAUSED",
+            },
+            updateMask: "status",
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(15000),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+
+    console.error(
+      "Google Ads Notfall-Pausierung fehlgeschlagen:",
+      response.status,
+      errorText.slice(0, 1500)
+    );
+
+    throw new Error(
+      `Google Ads: Pausierung fehlgeschlagen (HTTP ${response.status}).`
+    );
+  }
+
+  // Nach dem API-Aufruf den tatsächlichen Status prüfen.
+  const verifiedCampaigns =
+    await listAllMarktblattGoogleAdsCampaigns(shop);
+
+  const verifiedCampaign = verifiedCampaigns.find(
+    (item) => item.id === campaignId
+  );
+
+  if (
+    !verifiedCampaign ||
+    verifiedCampaign.name !== expectedName ||
+    verifiedCampaign.status !== "PAUSED"
+  ) {
+    throw new Error(
+      "Google Ads: Pausierung konnte nicht bestätigt werden."
+    );
+  }
+
+  return {
+    success: true,
+    campaignId,
+    alreadyPaused: false,
+    verified: true,
+  };
+}
