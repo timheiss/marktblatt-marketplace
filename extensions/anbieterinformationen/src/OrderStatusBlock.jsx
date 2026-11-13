@@ -22,6 +22,12 @@ const [vendorProfile, setVendorProfile] = useState({
   shippingOrigin: '',
   salesCountries: [],
   backgroundImageId: null,
+  companyLogoWideId: null,
+  companyLogoSquareId: null,
+  brandLogoIds: [],
+  companyLogoWideUrl: null,
+  companyLogoSquareUrl: null,
+  brandLogos: [],
     discountCode: '',
     discountPercent: '',
     discountMinimumOrderValue: '',
@@ -53,13 +59,82 @@ const [
   setUploadingVendorBackgroundImage,
 ] = useState(false);
 
+  const [selectedLogos, setSelectedLogos] = useState({
+    company_wide: null,
+    company_square: null,
+    brand: null,
+  });
+  const [logoBusy, setLogoBusy] = useState(false);
+
+  function logoLimit(kind) {
+    return kind === 'brand' ? 1024 * 1024 : 2 * 1024 * 1024;
+  }
+
+  function chooseLogo(kind, file) {
+    setError(null);
+    if (!file) {
+      setSelectedLogos((current) => ({...current, [kind]: null}));
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Bitte JPG, PNG oder WebP auswählen.');
+      return;
+    }
+    if (!file.size || file.size > logoLimit(kind)) {
+      setError(kind === 'brand'
+        ? 'Ein Markenlogo darf maximal 1 MB groß sein.'
+        : 'Ein Firmenlogo darf maximal 2 MB groß sein.');
+      return;
+    }
+    setSelectedLogos((current) => ({...current, [kind]: file}));
+  }
+
+  async function changeLogo(kind, operation, logoId = null) {
+    if (logoBusy) return;
+    const file = selectedLogos[kind];
+    if (operation === 'upload' && !file) {
+      setError('Bitte zuerst eine Bilddatei auswählen.');
+      return;
+    }
+    try {
+      setLogoBusy(true);
+      setError(null);
+      setSaveMessage(null);
+      const token = await shopify.sessionToken.get();
+      const form = new FormData();
+      form.append('operation', operation);
+      form.append('kind', kind);
+      if (operation === 'upload') form.append('image', file);
+      if (operation === 'delete' && logoId) form.append('logoId', logoId);
+      const response = await fetch(`${API_BASE_URL}/api/vendor-logo`, {
+        method: 'POST',
+        headers: {Authorization: `Bearer ${token}`},
+        body: form,
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Logo konnte nicht verarbeitet werden.');
+      }
+      setSelectedLogos((current) => ({...current, [kind]: null}));
+      // Fresh Shopify file URLs may become available after processing.
+      await loadVendorProfile(false);
+      setSaveMessage(operation === 'upload'
+        ? 'Logo wurde gespeichert. Die Vorschau kann kurz verzögert erscheinen.'
+        : 'Logo wurde entfernt.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Logo konnte nicht verarbeitet werden.');
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
   useEffect(() => {
     loadVendorProfile();
   }, []);
 
-  async function loadVendorProfile() {
+  async function loadVendorProfile(showLoading = true) {
     try {
-      setLoadingVendorProfile(true);
+      if (showLoading) setLoadingVendorProfile(true);
       setError(null);
 
       const token = await shopify.sessionToken.get();
@@ -85,7 +160,17 @@ const [
 
       const profile = data.profile || {};
 
-setVendorProfile({
+if (!showLoading) {
+        setVendorProfile((current) => ({
+          ...current,
+          companyLogoWideId: profile.companyLogoWideId || null,
+          companyLogoSquareId: profile.companyLogoSquareId || null,
+          brandLogoIds: Array.isArray(profile.brandLogoIds) ? profile.brandLogoIds : [],
+          companyLogoWideUrl: profile.companyLogoWideUrl || null,
+          companyLogoSquareUrl: profile.companyLogoSquareUrl || null,
+          brandLogos: Array.isArray(profile.brandLogos) ? profile.brandLogos : [],
+        }));
+      } else setVendorProfile({
   companyDescription:
     profile.companyDescription || '',
   shippingOrigin:
@@ -96,6 +181,12 @@ setVendorProfile({
       : [],
   backgroundImageId:
     profile.backgroundImageId || null,
+  companyLogoWideId: profile.companyLogoWideId || null,
+  companyLogoSquareId: profile.companyLogoSquareId || null,
+  brandLogoIds: Array.isArray(profile.brandLogoIds) ? profile.brandLogoIds : [],
+  companyLogoWideUrl: profile.companyLogoWideUrl || null,
+  companyLogoSquareUrl: profile.companyLogoSquareUrl || null,
+  brandLogos: Array.isArray(profile.brandLogos) ? profile.brandLogos : [],
         discountCode:
           profile.discountCode || '',
         discountPercent:
@@ -129,7 +220,7 @@ setVendorProfile({
           : 'Anbieterinformationen konnten nicht geladen werden.'
       );
     } finally {
-      setLoadingVendorProfile(false);
+      if (showLoading) setLoadingVendorProfile(false);
     }
   }
 
@@ -371,7 +462,6 @@ setVendorProfile({
   Beschreiben Sie Ihr Unternehmen und Ihre Angebote.
   Maximal 800 Zeichen.
 </s-text>
-
 <s-text>
   {vendorProfile.companyDescription.length} / 800 Zeichen
 </s-text>
@@ -445,29 +535,28 @@ setVendorProfile({
 
 <s-stack direction="block" gap="small">
   {EUROPEAN_COUNTRY_OPTIONS.map((country) => (
-    <s-checkbox
-      key={country.value}
-      checked={vendorProfile.salesCountries.includes(
-        country.value
-      )}
-      onChange={(event) => {
-        const checked = event.currentTarget.checked;
+<s-checkbox
+  key={country.value}
+  label={country.label}
+  checked={vendorProfile.salesCountries.includes(
+    country.value
+  )}
+  onChange={(event) => {
+    const checked = event.currentTarget.checked;
 
-        setVendorProfile((current) => ({
-          ...current,
-          salesCountries: checked
-            ? [...new Set([
-                ...current.salesCountries,
-                country.value,
-              ])]
-            : current.salesCountries.filter(
-                (value) => value !== country.value
-              ),
-        }));
-      }}
-    >
-      {country.label}
-    </s-checkbox>
+    setVendorProfile((current) => ({
+      ...current,
+      salesCountries: checked
+        ? [...new Set([
+            ...current.salesCountries,
+            country.value,
+          ])]
+        : current.salesCountries.filter(
+            (value) => value !== country.value
+          ),
+    }));
+  }}
+/>
   ))}
 </s-stack>
 )}
@@ -547,6 +636,107 @@ setVendorProfile({
                     ? 'Hintergrundbild ersetzen'
                     : 'Hintergrundbild hochladen'}
               </s-button>
+
+
+              {/* Firmenlogos und Markenlogos */}
+              <s-box paddingBlockStart="base">
+                <s-text type="strong">Firmenlogo im Querformat (3:1)</s-text>
+              </s-box>
+              <s-text>JPG, PNG oder WebP · maximal 2 MB · empfohlen 1200 × 400 Pixel.</s-text>
+              {vendorProfile.companyLogoWideUrl ? (
+                <s-image src={vendorProfile.companyLogoWideUrl} alt="Firmenlogo Querformat" />
+              ) : (
+                <s-text>{vendorProfile.companyLogoWideId
+                  ? 'Logo hinterlegt – Bildvorschau wird von Shopify verarbeitet.'
+                  : 'Noch kein Firmenlogo im Querformat hinterlegt.'}</s-text>
+              )}
+              <s-drop-zone
+                label="Firmenlogo Querformat auswählen"
+                accessibilityLabel="Firmenlogo im Querformat auswählen"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={logoBusy}
+                onChange={(event) => chooseLogo('company_wide', event.currentTarget.files?.[0] ?? null)}
+                onDropRejected={() => setError('Bitte JPG, PNG oder WebP auswählen.')}
+              />
+              {selectedLogos.company_wide && <s-text>Ausgewählt: {selectedLogos.company_wide.name}</s-text>}
+              <s-button disabled={logoBusy || !selectedLogos.company_wide} onClick={() => changeLogo('company_wide', 'upload')}>
+                {vendorProfile.companyLogoWideId ? 'Firmenlogo ersetzen' : 'Firmenlogo hochladen'}
+              </s-button>
+              {vendorProfile.companyLogoWideId && (
+                <s-button disabled={logoBusy} onClick={() => changeLogo('company_wide', 'delete')}>
+                  Firmenlogo Querformat entfernen
+                </s-button>
+              )}
+
+              <s-box paddingBlockStart="base">
+                <s-text type="strong">Firmenlogo im Quadrat (1:1)</s-text>
+              </s-box>
+              <s-text>JPG, PNG oder WebP · maximal 2 MB · empfohlen 600 × 600 Pixel.</s-text>
+              {vendorProfile.companyLogoSquareUrl ? (
+                <s-image src={vendorProfile.companyLogoSquareUrl} alt="Firmenlogo Quadrat" />
+              ) : (
+                <s-text>{vendorProfile.companyLogoSquareId
+                  ? 'Logo hinterlegt – Bildvorschau wird von Shopify verarbeitet.'
+                  : 'Noch kein quadratisches Firmenlogo hinterlegt.'}</s-text>
+              )}
+              <s-drop-zone
+                label="Firmenlogo Quadrat auswählen"
+                accessibilityLabel="Quadratisches Firmenlogo auswählen"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={logoBusy}
+                onChange={(event) => chooseLogo('company_square', event.currentTarget.files?.[0] ?? null)}
+                onDropRejected={() => setError('Bitte JPG, PNG oder WebP auswählen.')}
+              />
+              {selectedLogos.company_square && <s-text>Ausgewählt: {selectedLogos.company_square.name}</s-text>}
+              <s-button disabled={logoBusy || !selectedLogos.company_square} onClick={() => changeLogo('company_square', 'upload')}>
+                {vendorProfile.companyLogoSquareId ? 'Firmenlogo ersetzen' : 'Firmenlogo hochladen'}
+              </s-button>
+              {vendorProfile.companyLogoSquareId && (
+                <s-button disabled={logoBusy} onClick={() => changeLogo('company_square', 'delete')}>
+                  Firmenlogo Quadrat entfernen
+                </s-button>
+              )}
+
+              <s-box paddingBlockStart="base">
+                <s-text type="strong">Markenlogos</s-text>
+              </s-box>
+              <s-text>{vendorProfile.brandLogoIds.length} / 15 Markenlogos hinterlegt</s-text>
+              <s-text>JPG, PNG oder WebP · maximal 1 MB je Logo.</s-text>
+              {vendorProfile.brandLogoIds.map((id, index) => {
+                const logo = vendorProfile.brandLogos.find((item) => item.id === id);
+                return (
+                  <s-box key={id} paddingBlockStart="small">
+                    <s-text>Markenlogo {index + 1}</s-text>
+                    {logo?.url ? (
+                      <s-image src={logo.url} alt={`Markenlogo ${index + 1}`} />
+                    ) : (
+                      <s-text>Bildvorschau wird von Shopify verarbeitet.</s-text>
+                    )}
+                    <s-button disabled={logoBusy} onClick={() => changeLogo('brand', 'delete', id)}>
+                      Markenlogo {index + 1} entfernen
+                    </s-button>
+                  </s-box>
+                );
+              })}
+              {vendorProfile.brandLogoIds.length < 15 && (
+                <>
+                  <s-drop-zone
+                    label="Markenlogo auswählen"
+                    accessibilityLabel="Markenlogo auswählen"
+                    accept="image/jpeg,image/png,image/webp"
+                    disabled={logoBusy}
+                    onChange={(event) => chooseLogo('brand', event.currentTarget.files?.[0] ?? null)}
+                    onDropRejected={() => setError('Bitte JPG, PNG oder WebP auswählen.')}
+                  />
+                  {selectedLogos.brand && <s-text>Ausgewählt: {selectedLogos.brand.name}</s-text>}
+                  <s-button disabled={logoBusy || !selectedLogos.brand} onClick={() => changeLogo('brand', 'upload')}>
+                    Markenlogo hinzufügen
+                  </s-button>
+                </>
+              )}
+              {vendorProfile.brandLogoIds.length >= 15 && (
+                <s-text>Die maximale Anzahl von 15 Markenlogos ist erreicht.</s-text>
+              )}
 
               <s-text-field
                 label="Rabattcode"

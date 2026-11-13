@@ -1,6 +1,6 @@
 import db from "../db.server";
 import countries from "i18n-iso-countries";
-import { authenticate } from "../shopify.server";
+import { authenticate, unauthenticated } from "../shopify.server";
 
 /*
  * =========================================================
@@ -78,6 +78,93 @@ function optionalText(value, maxLength) {
  * =========================================================
  */
 
+/*
+ * =========================================================
+ * SHOPIFY LOGO-BILDER LADEN
+ * =========================================================
+ */
+
+async function loadVendorLogoImages(profile) {
+  const emptyResult = {
+    companyLogoWideUrl: null,
+    companyLogoSquareUrl: null,
+    brandLogos: [],
+  };
+
+  if (!profile) {
+    return emptyResult;
+  }
+
+  const logoIds = [
+    profile.companyLogoWideId,
+    profile.companyLogoSquareId,
+    ...(profile.brandLogoIds || []),
+  ].filter(Boolean);
+
+  if (logoIds.length === 0) {
+    return emptyResult;
+  }
+
+  const shop = process.env.MARKTBLATT_SHOP;
+
+  if (
+    !shop ||
+    !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop)
+  ) {
+    throw new Error("MARKTBLATT_SHOP ist nicht korrekt konfiguriert.");
+  }
+
+  const { admin } = await unauthenticated.admin(shop);
+
+  const response = await admin.graphql(
+    `#graphql
+      query VendorLogoImages($ids: [ID!]!) {
+        nodes(ids: $ids) {
+          id
+          ... on MediaImage {
+            image {
+              url
+            }
+          }
+        }
+      }
+    `,
+    {
+      variables: {
+        ids: [...new Set(logoIds)],
+      },
+    }
+  );
+
+  const result = await response.json();
+
+  if (result.errors?.length) {
+    console.error("VENDOR LOGO GRAPHQL ERROR:", result.errors);
+    throw new Error("Logo-Bilder konnten nicht geladen werden.");
+  }
+
+  const imageUrls = new Map();
+
+  for (const node of result.data?.nodes || []) {
+    if (node?.id && node?.image?.url) {
+      imageUrls.set(node.id, node.image.url);
+    }
+  }
+
+  return {
+    companyLogoWideUrl:
+      imageUrls.get(profile.companyLogoWideId) || null,
+
+    companyLogoSquareUrl:
+      imageUrls.get(profile.companyLogoSquareId) || null,
+
+    brandLogos: (profile.brandLogoIds || []).map((id) => ({
+      id,
+      url: imageUrls.get(id) || null,
+    })),
+  };
+}
+
 function formatProfile(profile) {
   return {
     companyDescription:
@@ -91,6 +178,15 @@ salesCountries:
 
     backgroundImageId:
       profile?.backgroundImageId ?? null,
+
+    companyLogoWideId:
+      profile?.companyLogoWideId ?? null,
+
+    companyLogoSquareId:
+      profile?.companyLogoSquareId ?? null,
+
+    brandLogoIds:
+      profile?.brandLogoIds ?? [],
 
     discountCode:
       profile?.discountCode ?? "",
@@ -182,11 +278,15 @@ export const loader = async ({ request }) => {
         },
       });
 
+    const logoImages = await loadVendorLogoImages(profile);
+
     return cors(
       Response.json({
         success: true,
-        profile:
-          formatProfile(profile),
+        profile: {
+          ...formatProfile(profile),
+          ...logoImages,
+        },
       })
     );
   } catch (error) {

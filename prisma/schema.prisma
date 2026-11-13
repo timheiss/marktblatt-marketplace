@@ -109,6 +109,15 @@ salesCountries String[] @default([])
   // gid://shopify/MediaImage/123456789
   backgroundImageId String?
 
+  // Firmenlogo im Querformat
+  companyLogoWideId String?
+
+  // Firmenlogo im quadratischen Format
+  companyLogoSquareId String?
+
+  // Bis zu 20 Markenlogos (Shopify File GIDs)
+  brandLogoIds String[] @default([])
+
   discountCode String?
 
   // Prozentwert, z. B. 10 für 10 %
