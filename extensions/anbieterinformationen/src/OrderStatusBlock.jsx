@@ -46,8 +46,6 @@ const [vendorProfile, setVendorProfile] = useState({
 
   const [error, setError] = useState(null);
 
-const [saveMessage, setSaveMessage] = useState(null);
-
 const [savingVendorProfile, setSavingVendorProfile] =
   useState(false);
 
@@ -65,23 +63,43 @@ const [
     brand: null,
   });
   const [logoBusy, setLogoBusy] = useState(false);
+  const [logoMessages, setLogoMessages] = useState({
+    company_wide: null,
+    company_square: null,
+    brand: null,
+  });
+  const [backgroundMessage, setBackgroundMessage] = useState(null);
+  const [profileMessage, setProfileMessage] = useState(null);
+
+  function showLogoMessage(kind, tone, text) {
+    setLogoMessages((current) => ({...current, [kind]: {tone, text}}));
+  }
+
+  function logoNotice(kind) {
+    const message = logoMessages[kind];
+    return message ? (
+      <s-banner tone={message.tone}>{message.text}</s-banner>
+    ) : null;
+  }
 
   function logoLimit(kind) {
     return kind === 'brand' ? 1024 * 1024 : 2 * 1024 * 1024;
   }
 
   function chooseLogo(kind, file) {
-    setError(null);
+    setLogoMessages((current) => ({...current, [kind]: null}));
     if (!file) {
       setSelectedLogos((current) => ({...current, [kind]: null}));
       return;
     }
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setError('Bitte JPG, PNG oder WebP auswählen.');
+      setSelectedLogos((current) => ({...current, [kind]: null}));
+      showLogoMessage(kind, 'critical', 'Bitte JPG, PNG oder WebP auswählen.');
       return;
     }
     if (!file.size || file.size > logoLimit(kind)) {
-      setError(kind === 'brand'
+      setSelectedLogos((current) => ({...current, [kind]: null}));
+      showLogoMessage(kind, 'critical', kind === 'brand'
         ? 'Ein Markenlogo darf maximal 1 MB groß sein.'
         : 'Ein Firmenlogo darf maximal 2 MB groß sein.');
       return;
@@ -93,13 +111,12 @@ const [
     if (logoBusy) return;
     const file = selectedLogos[kind];
     if (operation === 'upload' && !file) {
-      setError('Bitte zuerst eine Bilddatei auswählen.');
+      showLogoMessage(kind, 'critical', 'Bitte zuerst eine Bilddatei auswählen.');
       return;
     }
     try {
       setLogoBusy(true);
-      setError(null);
-      setSaveMessage(null);
+      setLogoMessages((current) => ({...current, [kind]: null}));
       const token = await shopify.sessionToken.get();
       const form = new FormData();
       form.append('operation', operation);
@@ -113,16 +130,22 @@ const [
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Logo konnte nicht verarbeitet werden.');
+        throw new Error((data.error || 'Das Logo konnte nicht verarbeitet werden.').replace(/Shopify/gi, 'Marktblatt'));
       }
       setSelectedLogos((current) => ({...current, [kind]: null}));
-      // Fresh Shopify file URLs may become available after processing.
-      await loadVendorProfile(false);
-      setSaveMessage(operation === 'upload'
-        ? 'Logo wurde gespeichert. Die Vorschau kann kurz verzögert erscheinen.'
+      showLogoMessage(kind, 'success', operation === 'upload'
+        ? 'Logo wurde gespeichert. Die Bildvorschau kann kurz verzögert erscheinen.'
         : 'Logo wurde entfernt.');
+      // Die erneute Abfrage aktualisiert nur die Logodaten und erhält ungespeicherte Formularänderungen.
+      try {
+        await loadVendorProfile(false);
+      } catch (refreshError) {
+        console.error('LOGO REFRESH ERROR:', refreshError);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Logo konnte nicht verarbeitet werden.');
+      showLogoMessage(kind, 'critical', err instanceof Error
+        ? err.message
+        : 'Das Logo konnte nicht verarbeitet werden.');
     } finally {
       setLogoBusy(false);
     }
@@ -135,7 +158,7 @@ const [
   async function loadVendorProfile(showLoading = true) {
     try {
       if (showLoading) setLoadingVendorProfile(true);
-      setError(null);
+      if (showLoading) setError(null);
 
       const token = await shopify.sessionToken.get();
 
@@ -233,8 +256,7 @@ if (!showLoading) {
   async function uploadVendorBackgroundImage() {
     try {
       setUploadingVendorBackgroundImage(true);
-      setError(null);
-      setSaveMessage(null);
+      setBackgroundMessage(null);
 
       if (!vendorBackgroundImage) {
         throw new Error(
@@ -280,9 +302,7 @@ if (!showLoading) {
 
       setVendorBackgroundImage(null);
 
-      setSaveMessage(
-        'Hintergrundbild wurde erfolgreich gespeichert.'
-      );
+      setBackgroundMessage({tone: 'success', text: 'Hintergrundbild wurde erfolgreich gespeichert.'});
 
     } catch (err) {
       console.error(
@@ -290,11 +310,10 @@ if (!showLoading) {
         err
       );
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Das Hintergrundbild konnte nicht hochgeladen werden.'
-      );
+      setBackgroundMessage({
+        tone: 'critical',
+        text: err instanceof Error ? err.message : 'Das Hintergrundbild konnte nicht hochgeladen werden.',
+      });
 
     } finally {
       setUploadingVendorBackgroundImage(false);
@@ -309,14 +328,13 @@ if (!showLoading) {
 
   async function saveVendorProfile() {
     try {
-      setError(null);
-      setSaveMessage(null);
+      setProfileMessage(null);
 
       if (
         !vendorProfile.deliveryTimeInfo ||
         !String(vendorProfile.deliveryTimeInfo).trim()
       ) {
-        setError('Bitte wählen Sie eine Lieferzeit aus.');
+        setProfileMessage({tone: 'critical', text: 'Bitte wählen Sie eine Lieferzeit aus.'});
         return;
       }
 
@@ -400,18 +418,15 @@ if (!showLoading) {
           profile.youtubeUrl || '',
       }));
 
-      setSaveMessage(
-        'Anbieterinformationen wurden gespeichert.'
-      );
+      setProfileMessage({tone: 'success', text: 'Anbieterinformationen wurden gespeichert.'});
 
     } catch (err) {
       console.error('VENDOR PROFILE SAVE ERROR:', err);
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Anbieterinformationen konnten nicht gespeichert werden.'
-      );
+      setProfileMessage({
+        tone: 'critical',
+        text: err instanceof Error ? err.message : 'Anbieterinformationen konnten nicht gespeichert werden.',
+      });
     } finally {
       setSavingVendorProfile(false);
     }
@@ -426,16 +441,8 @@ if (!showLoading) {
             auf Marktblatt.
           </s-text>
 
-          {error && (
-            <s-banner tone="critical">
-              {error}
-            </s-banner>
-          )}
-
-          {saveMessage && (
-            <s-banner tone="success">
-              {saveMessage}
-            </s-banner>
+          {loadingVendorProfile && error && (
+            <s-banner tone="critical">{error}</s-banner>
           )}
 
           {loadingVendorProfile ? (
@@ -588,20 +595,16 @@ if (!showLoading) {
 
                   if (file.size > 10 * 1024 * 1024) {
                     setVendorBackgroundImage(null);
-                    setError(
-                      'Das Bild darf maximal 10 MB groß sein.'
-                    );
+                    setBackgroundMessage({tone: 'critical', text: 'Das Bild darf maximal 10 MB groß sein.'});
                     return;
                   }
 
-                    setError(null);
+                    setBackgroundMessage(null);
                     setVendorBackgroundImage(file);
                 }}
                 onDropRejected={() => {
                   setVendorBackgroundImage(null);
-                  setError(
-                    'Bitte verwenden Sie ausschließlich ein JPG-, PNG- oder WebP-Bild.'
-                  );
+                  setBackgroundMessage({tone: 'critical', text: 'Bitte verwenden Sie ausschließlich ein JPG-, PNG- oder WebP-Bild.'});
                 }}
               />
 
@@ -618,9 +621,7 @@ if (!showLoading) {
               )}
 
               {vendorProfile.backgroundImageId && (
-                <s-text>
-                  ✓ Ein Hintergrundbild ist bereits hinterlegt.
-                </s-text>
+                <s-banner tone="success">✓ Ein Hintergrundbild ist bereits hinterlegt.</s-banner>
               )}
 
               <s-button
@@ -636,19 +637,24 @@ if (!showLoading) {
                     ? 'Hintergrundbild ersetzen'
                     : 'Hintergrundbild hochladen'}
               </s-button>
-
+              {backgroundMessage && (
+                <s-banner tone={backgroundMessage.tone}>{backgroundMessage.text}</s-banner>
+              )}
 
               {/* Firmenlogos und Markenlogos */}
               <s-box paddingBlockStart="base">
-                <s-text type="strong">Firmenlogo im Querformat (3:1)</s-text>
+                <s-text type="strong">Firmenlogo im Querformat (2:1)</s-text>
               </s-box>
-              <s-text>JPG, PNG oder WebP · maximal 2 MB · empfohlen 1200 × 400 Pixel.</s-text>
+              <s-text>JPG, PNG oder WebP · maximal 2 MB · empfohlen 1200 × 600 Pixel.</s-text>
               {vendorProfile.companyLogoWideUrl ? (
                 <s-image src={vendorProfile.companyLogoWideUrl} alt="Firmenlogo Querformat" />
               ) : (
                 <s-text>{vendorProfile.companyLogoWideId
-                  ? 'Logo hinterlegt – Bildvorschau wird von Shopify verarbeitet.'
+                  ? 'Logo hinterlegt – die Bildvorschau wird noch verarbeitet.'
                   : 'Noch kein Firmenlogo im Querformat hinterlegt.'}</s-text>
+              )}
+              {vendorProfile.companyLogoWideId && (
+                <s-banner tone="success">✓ Firmenlogo im Querformat ist hinterlegt.</s-banner>
               )}
               <s-drop-zone
                 label="Firmenlogo Querformat auswählen"
@@ -656,7 +662,7 @@ if (!showLoading) {
                 accept="image/jpeg,image/png,image/webp"
                 disabled={logoBusy}
                 onChange={(event) => chooseLogo('company_wide', event.currentTarget.files?.[0] ?? null)}
-                onDropRejected={() => setError('Bitte JPG, PNG oder WebP auswählen.')}
+                onDropRejected={() => showLogoMessage('company_wide', 'critical', 'Bitte JPG, PNG oder WebP auswählen.')}
               />
               {selectedLogos.company_wide && <s-text>Ausgewählt: {selectedLogos.company_wide.name}</s-text>}
               <s-button disabled={logoBusy || !selectedLogos.company_wide} onClick={() => changeLogo('company_wide', 'upload')}>
@@ -667,6 +673,7 @@ if (!showLoading) {
                   Firmenlogo Querformat entfernen
                 </s-button>
               )}
+              {logoNotice('company_wide')}
 
               <s-box paddingBlockStart="base">
                 <s-text type="strong">Firmenlogo im Quadrat (1:1)</s-text>
@@ -676,8 +683,11 @@ if (!showLoading) {
                 <s-image src={vendorProfile.companyLogoSquareUrl} alt="Firmenlogo Quadrat" />
               ) : (
                 <s-text>{vendorProfile.companyLogoSquareId
-                  ? 'Logo hinterlegt – Bildvorschau wird von Shopify verarbeitet.'
+                  ? 'Logo hinterlegt – die Bildvorschau wird noch verarbeitet.'
                   : 'Noch kein quadratisches Firmenlogo hinterlegt.'}</s-text>
+              )}
+              {vendorProfile.companyLogoSquareId && (
+                <s-banner tone="success">✓ Quadratisches Firmenlogo ist hinterlegt.</s-banner>
               )}
               <s-drop-zone
                 label="Firmenlogo Quadrat auswählen"
@@ -685,7 +695,7 @@ if (!showLoading) {
                 accept="image/jpeg,image/png,image/webp"
                 disabled={logoBusy}
                 onChange={(event) => chooseLogo('company_square', event.currentTarget.files?.[0] ?? null)}
-                onDropRejected={() => setError('Bitte JPG, PNG oder WebP auswählen.')}
+                onDropRejected={() => showLogoMessage('company_square', 'critical', 'Bitte JPG, PNG oder WebP auswählen.')}
               />
               {selectedLogos.company_square && <s-text>Ausgewählt: {selectedLogos.company_square.name}</s-text>}
               <s-button disabled={logoBusy || !selectedLogos.company_square} onClick={() => changeLogo('company_square', 'upload')}>
@@ -696,11 +706,15 @@ if (!showLoading) {
                   Firmenlogo Quadrat entfernen
                 </s-button>
               )}
+              {logoNotice('company_square')}
 
               <s-box paddingBlockStart="base">
                 <s-text type="strong">Markenlogos</s-text>
               </s-box>
               <s-text>{vendorProfile.brandLogoIds.length} / 15 Markenlogos hinterlegt</s-text>
+              {vendorProfile.brandLogoIds.length > 0 && (
+                <s-banner tone="success">✓ Markenlogos sind hinterlegt.</s-banner>
+              )}
               <s-text>JPG, PNG oder WebP · maximal 1 MB je Logo.</s-text>
               {vendorProfile.brandLogoIds.map((id, index) => {
                 const logo = vendorProfile.brandLogos.find((item) => item.id === id);
@@ -710,7 +724,7 @@ if (!showLoading) {
                     {logo?.url ? (
                       <s-image src={logo.url} alt={`Markenlogo ${index + 1}`} />
                     ) : (
-                      <s-text>Bildvorschau wird von Shopify verarbeitet.</s-text>
+                      <s-text>Die Bildvorschau wird noch verarbeitet.</s-text>
                     )}
                     <s-button disabled={logoBusy} onClick={() => changeLogo('brand', 'delete', id)}>
                       Markenlogo {index + 1} entfernen
@@ -719,24 +733,26 @@ if (!showLoading) {
                 );
               })}
               {vendorProfile.brandLogoIds.length < 15 && (
-                <>
+                <s-stack direction="block" gap="base">
                   <s-drop-zone
                     label="Markenlogo auswählen"
                     accessibilityLabel="Markenlogo auswählen"
                     accept="image/jpeg,image/png,image/webp"
                     disabled={logoBusy}
                     onChange={(event) => chooseLogo('brand', event.currentTarget.files?.[0] ?? null)}
-                    onDropRejected={() => setError('Bitte JPG, PNG oder WebP auswählen.')}
+                    onDropRejected={() => showLogoMessage('brand', 'critical', 'Bitte JPG, PNG oder WebP auswählen.')}
                   />
                   {selectedLogos.brand && <s-text>Ausgewählt: {selectedLogos.brand.name}</s-text>}
                   <s-button disabled={logoBusy || !selectedLogos.brand} onClick={() => changeLogo('brand', 'upload')}>
                     Markenlogo hinzufügen
                   </s-button>
-                </>
+                  {logoNotice('brand')}
+                </s-stack>
               )}
               {vendorProfile.brandLogoIds.length >= 15 && (
                 <s-text>Die maximale Anzahl von 15 Markenlogos ist erreicht.</s-text>
               )}
+              {vendorProfile.brandLogoIds.length >= 15 && logoNotice('brand')}
 
               <s-text-field
                 label="Rabattcode"
@@ -802,6 +818,9 @@ if (!showLoading) {
                   ? 'Wird gespeichert...'
                   : 'Anbieterinformationen speichern'}
               </s-button>
+              {profileMessage && (
+                <s-banner tone={profileMessage.tone}>{profileMessage.text}</s-banner>
+              )}
             </>
           )}
         </s-stack>

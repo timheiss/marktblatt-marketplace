@@ -147,9 +147,12 @@ if (!image.size || image.size > maxFileSize) {
     }
     if (!metadata.width || !metadata.height) return json({ success: false, error: "Bildabmessungen fehlen." }, 400, cors);
     const ratio = metadata.width / metadata.height;
-    if (kind === "company_wide" && Math.abs(ratio - 3) > 0.03) {
-      return json({ success: false, error: "Das Firmenlogo im Querformat muss 3:1 haben (±1 %)." }, 400, cors);
-    }
+if (kind === "company_wide" && Math.abs(ratio - 2) > 0.02) {
+  return json({
+    success: false,
+    error: "Das Firmenlogo im Querformat muss 2:1 haben (±1 %)."
+  }, 400, cors);
+}
     if (kind === "company_square" && Math.abs(ratio - 1) > 0.01) {
       return json({ success: false, error: "Das quadratische Firmenlogo muss 1:1 haben (±1 %)." }, 400, cors);
     }
