@@ -621,7 +621,7 @@ if (!showLoading) {
               )}
 
               {vendorProfile.backgroundImageId && (
-                <s-banner tone="success">✓ Ein Hintergrundbild ist bereits hinterlegt.</s-banner>
+                <s-banner tone="success"> Ein Hintergrundbild ist bereits hinterlegt.</s-banner>
               )}
 
               <s-button
@@ -654,7 +654,7 @@ if (!showLoading) {
                   : 'Noch kein Firmenlogo im Querformat hinterlegt.'}</s-text>
               )}
               {vendorProfile.companyLogoWideId && (
-                <s-banner tone="success">✓ Firmenlogo im Querformat ist hinterlegt.</s-banner>
+                <s-banner tone="success"> Firmenlogo im Querformat ist hinterlegt.</s-banner>
               )}
               <s-drop-zone
                 label="Firmenlogo Querformat auswählen"
@@ -687,7 +687,7 @@ if (!showLoading) {
                   : 'Noch kein quadratisches Firmenlogo hinterlegt.'}</s-text>
               )}
               {vendorProfile.companyLogoSquareId && (
-                <s-banner tone="success">✓ Quadratisches Firmenlogo ist hinterlegt.</s-banner>
+                <s-banner tone="success"> Quadratisches Firmenlogo ist hinterlegt.</s-banner>
               )}
               <s-drop-zone
                 label="Firmenlogo Quadrat auswählen"
@@ -713,7 +713,7 @@ if (!showLoading) {
               </s-box>
               <s-text>{vendorProfile.brandLogoIds.length} / 15 Markenlogos hinterlegt</s-text>
               {vendorProfile.brandLogoIds.length > 0 && (
-                <s-banner tone="success">✓ Markenlogos sind hinterlegt.</s-banner>
+                <s-banner tone="success"> Markenlogos sind hinterlegt.</s-banner>
               )}
               <s-text>JPG, PNG oder WebP · maximal 1 MB je Logo.</s-text>
               {vendorProfile.brandLogoIds.map((id, index) => {
