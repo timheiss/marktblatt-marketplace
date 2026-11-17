@@ -44,6 +44,9 @@ importers:
       i18n-iso-countries:
         specifier: ^7.14.0
         version: 7.14.0
+      ipaddr.js:
+        specifier: ^1.9.1
+        version: 1.9.1
       isbot:
         specifier: ^5.1.31
         version: 5.2.2
