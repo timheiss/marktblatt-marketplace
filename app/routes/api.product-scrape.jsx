@@ -1,115 +1,12 @@
+import db from "../db.server";
 import * as cheerio from "cheerio";
 import sanitizeHtml from "sanitize-html";
-import dns from "node:dns/promises";
-import net from "node:net";
-
-const MAX_HTML_SIZE = 5 * 1024 * 1024;
-const FETCH_TIMEOUT = 10000;
-
-
-/*
- * =========================================================
- * SICHERHEIT: PRIVATE / INTERNE IP-ADRESSEN BLOCKIEREN
- * =========================================================
- */
-
-function isPrivateIp(ip) {
-  if (!net.isIP(ip)) return true;
-
-  // IPv4
-  if (net.isIPv4(ip)) {
-    const parts = ip.split(".").map(Number);
-    const [a, b] = parts;
-
-    return (
-      a === 10 ||
-      a === 127 ||
-      a === 0 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      a >= 224
-    );
-  }
-
-  // IPv6
-  const normalized = ip.toLowerCase();
-
-  return (
-    normalized === "::1" ||
-    normalized === "::" ||
-    normalized.startsWith("fc") ||
-    normalized.startsWith("fd") ||
-    normalized.startsWith("fe8") ||
-    normalized.startsWith("fe9") ||
-    normalized.startsWith("fea") ||
-    normalized.startsWith("feb")
-  );
-}
-
-
-/*
- * =========================================================
- * PRODUKT-URL PRÜFEN
- * =========================================================
- */
-
-async function validatePublicUrl(value) {
-  let url;
-
-  try {
-    url = new URL(value);
-  } catch {
-    throw new Error("Die Produkt-URL ist ungültig.");
-  }
-
-  if (!["http:", "https:"].includes(url.protocol)) {
-    throw new Error(
-      "Es sind nur HTTP- und HTTPS-Adressen erlaubt."
-    );
-  }
-
-  if (url.username || url.password) {
-    throw new Error(
-      "URLs mit Zugangsdaten sind nicht erlaubt."
-    );
-  }
-
-  const hostname = url.hostname.toLowerCase();
-
-  if (
-    hostname === "localhost" ||
-    hostname.endsWith(".localhost") ||
-    hostname.endsWith(".local") ||
-    hostname.endsWith(".internal")
-  ) {
-    throw new Error(
-      "Diese Adresse ist nicht erlaubt."
-    );
-  }
-
-  const addresses = await dns.lookup(
-    hostname,
-    {all: true}
-  );
-
-  if (!addresses.length) {
-    throw new Error(
-      "Die Domain konnte nicht gefunden werden."
-    );
-  }
-
-  for (const address of addresses) {
-    if (isPrivateIp(address.address)) {
-      throw new Error(
-        "Private oder interne Netzwerkadressen sind nicht erlaubt."
-      );
-    }
-  }
-
-  return url;
-}
+import { authenticate } from "../shopify.server";
+import {
+  getVerifiedVendorShop,
+  assertVerifiedShopDomain,
+} from "../services/vendor-shop-domain.server";
+import { secureDownloadHtml } from "../services/secure-product-fetch.server";
 
 
 /*
@@ -2096,208 +1993,6 @@ function extractVendorLinks(
   };
 }
 
-async function downloadHtml(startUrl) {
-  let currentUrl =
-    await validatePublicUrl(startUrl);
-
-  for (
-    let redirectCount = 0;
-    redirectCount <= 5;
-    redirectCount++
-  ) {
-    const controller =
-      new AbortController();
-
-    const timeout = setTimeout(
-      () => controller.abort(),
-      FETCH_TIMEOUT
-    );
-
-    let response;
-
-    try {
-      response = await fetch(
-        currentUrl.href,
-        {
-          redirect: "manual",
-
-          signal:
-            controller.signal,
-
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (compatible; MarktblattProductImporter/1.0)",
-
-            Accept:
-              "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-
-            "Accept-Language":
-              "de-DE,de;q=0.9,en;q=0.7",
-          },
-        }
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    /*
-     * WEITERLEITUNGEN
-     */
-
-    if (
-      [
-        301,
-        302,
-        303,
-        307,
-        308,
-      ].includes(response.status)
-    ) {
-      const location =
-        response.headers.get(
-          "location"
-        );
-
-      if (!location) {
-        throw new Error(
-          "Ungültige Weiterleitung der Produktseite."
-        );
-      }
-
-      const redirectedUrl =
-        new URL(
-          location,
-          currentUrl
-        );
-
-      currentUrl =
-        await validatePublicUrl(
-          redirectedUrl.href
-        );
-
-      continue;
-    }
-
-    /*
-     * HTTP FEHLER
-     */
-
-    if (!response.ok) {
-      throw new Error(
-        `Die Produktseite antwortet mit HTTP ${response.status}.`
-      );
-    }
-
-    /*
-     * NUR HTML
-     */
-
-    const contentType =
-      response.headers.get(
-        "content-type"
-      ) || "";
-
-    if (
-      !contentType
-        .toLowerCase()
-        .includes("text/html")
-    ) {
-      throw new Error(
-        "Die angegebene Adresse ist keine HTML-Produktseite."
-      );
-    }
-
-    /*
-     * DATEIGRÖSSE PRÜFEN
-     */
-
-    const declaredLength =
-      Number(
-        response.headers.get(
-          "content-length"
-        ) || 0
-      );
-
-    if (
-      declaredLength >
-      MAX_HTML_SIZE
-    ) {
-      throw new Error(
-        "Die Produktseite ist zu groß."
-      );
-    }
-
-    const reader =
-      response.body?.getReader();
-
-    if (!reader) {
-      throw new Error(
-        "Die Produktseite konnte nicht gelesen werden."
-      );
-    }
-
-    const chunks = [];
-    let received = 0;
-
-    while (true) {
-      const {
-        done,
-        value,
-      } = await reader.read();
-
-      if (done) {
-        break;
-      }
-
-      received +=
-        value.byteLength;
-
-      if (
-        received >
-        MAX_HTML_SIZE
-      ) {
-        await reader.cancel();
-
-        throw new Error(
-          "Die Produktseite ist zu groß."
-        );
-      }
-
-      chunks.push(value);
-    }
-
-    const bytes =
-      new Uint8Array(received);
-
-    let position = 0;
-
-    for (const chunk of chunks) {
-      bytes.set(
-        chunk,
-        position
-      );
-
-      position +=
-        chunk.byteLength;
-    }
-
-    return {
-      html:
-        new TextDecoder().decode(
-          bytes
-        ),
-
-      finalUrl:
-        currentUrl.href,
-    };
-  }
-
-  throw new Error(
-    "Die Produktseite hat zu viele Weiterleitungen."
-  );
-}
-
-
 /*
  * =========================================================
  * PRODUKTDATEN EXTRAHIEREN
@@ -3073,55 +2768,103 @@ export async function action({
   request,
 }) {
   
-const corsHeaders = {
-    "Access-Control-Allow-Origin":
-      "*",
-
-    "Access-Control-Allow-Headers":
-      "Authorization, Content-Type",
-
-    "Access-Control-Allow-Methods":
-      "POST, OPTIONS",
-  };
+  let cors = (response) => response;
 
   try {
-    const body =
-      await request.json();
+    const auth = await authenticate.public.customerAccount(request);
+    cors = auth.cors;
 
-    const productUrl =
-      body?.url;
+    const customerId = auth.sessionToken?.sub;
 
-    if (
-      !productUrl ||
-      typeof productUrl !==
-        "string"
-    ) {
-      return Response.json(
-        {
-          success: false,
-
-          error:
-            "Bitte geben Sie eine Produkt-URL ein.",
-        },
-        {
-          status: 400,
-          headers:
-            corsHeaders,
-        }
+    if (!customerId) {
+      return cors(
+        Response.json(
+          {
+            success: false,
+            error: "Nicht angemeldet.",
+          },
+          { status: 401 }
+        )
       );
     }
 
-    /*
-     * PRODUKTSEITE LADEN
-     */
+/*
+ * =========================================================
+ * MARKTBLATT-PAKETBERECHTIGUNG PRÜFEN
+ * =========================================================
+ */
+
+const subscription = await db.subscription.findUnique({
+  where: {
+    customerId,
+  },
+});
+
+if (
+  !subscription ||
+  subscription.status !== "active"
+) {
+  return cors(
+    Response.json(
+      {
+        success: false,
+        error: "Für den Produktimport ist ein aktives Marktblatt-Paket erforderlich.",
+      },
+      { status: 403 }
+    )
+  );
+}
+
+if (
+  !Number.isInteger(subscription.productLimit) ||
+  subscription.productLimit < 1
+) {
+  return cors(
+    Response.json(
+      {
+        success: false,
+        error: "Für dieses Paket ist kein gültiges Produktlimit hinterlegt.",
+      },
+      { status: 403 }
+    )
+  );
+}
+
+const verifiedShop = await getVerifiedVendorShop(customerId);
+
+const body = await request.json();
+const productUrl = body?.url;
+
+if (!productUrl || typeof productUrl !== "string") {
+  return cors(
+    Response.json(
+      {
+        success: false,
+        error: "Bitte geben Sie eine Produkt-URL ein.",
+      },
+      { status: 400 }
+    )
+  );
+}
+
+// Nur URLs des verifizierten Onlineshops zulassen.
+assertVerifiedShopDomain(
+  productUrl,
+  verifiedShop.shopUrl
+);
+
+/*
+ * PRODUKTSEITE LADEN
+ */
 
     const {
       html,
       finalUrl,
     } =
-      await downloadHtml(
-        productUrl
-      );
+await secureDownloadHtml(
+  productUrl,
+  verifiedShop.shopUrl
+);
 
     /*
      * PRODUKT AUSLESEN
@@ -3512,36 +3255,28 @@ marktblattCategoryTags:
 });
 
     if (!product.title) {
-      return Response.json(
-        {
-          success: false,
-
-          error:
-            "Auf dieser Seite konnten keine eindeutigen Produktdaten gefunden werden.",
-        },
-        {
-          status: 422,
-
-          headers:
-            corsHeaders,
-        }
-      );
+return cors(
+  Response.json(
+    {
+      success: false,
+      error:
+        "Auf dieser Seite konnten keine eindeutigen Produktdaten gefunden werden.",
+    },
+    { status: 422 }
+  )
+);
     }
 
     /*
      * ERFOLGREICHE ANTWORT
      */
 
-    return Response.json(
-      {
-        success: true,
-        product,
-      },
-      {
-        headers:
-          corsHeaders,
-      }
-    );
+return cors(
+  Response.json({
+    success: true,
+    product,
+  })
+);
   } catch (error) {
     console.error(
       "PRODUCT SCRAPE ERROR:",
@@ -3556,18 +3291,15 @@ marktblattCategoryTags:
           ? error.message
           : "Das Produkt konnte nicht geprüft werden.";
 
-    return Response.json(
-      {
-        success: false,
-        error: message,
-      },
-      {
-        status: 400,
-
-        headers:
-          corsHeaders,
-      }
-    );
+return cors(
+  Response.json(
+    {
+      success: false,
+      error: message,
+    },
+    { status: 400 }
+  )
+);
   }
 }
 

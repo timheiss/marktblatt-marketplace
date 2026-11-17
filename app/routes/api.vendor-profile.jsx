@@ -1,6 +1,7 @@
 import db from "../db.server";
 import countries from "i18n-iso-countries";
 import { authenticate, unauthenticated } from "../shopify.server";
+import process from "node:process";
 
 /*
  * =========================================================
@@ -167,6 +168,14 @@ async function loadVendorLogoImages(profile) {
 
 function formatProfile(profile) {
   return {
+    verificationStatus:
+      profile?.verificationStatus ?? "unverified",
+
+    verificationShopUrl:
+      profile?.verificationStatus === "verified"
+        ? profile?.verificationShopUrl ?? ""
+        : "",
+
     companyDescription:
       profile?.companyDescription ?? "",
 
@@ -278,7 +287,19 @@ export const loader = async ({ request }) => {
         },
       });
 
-    const logoImages = await loadVendorLogoImages(profile);
+    let logoImages;
+
+try {
+  logoImages = await loadVendorLogoImages(profile);
+} catch (logoError) {
+  console.error("VENDOR LOGO LOAD ERROR:", logoError);
+
+  logoImages = {
+    companyLogoWideUrl: null,
+    companyLogoSquareUrl: null,
+    brandLogos: [],
+  };
+}
 
     return cors(
       Response.json({

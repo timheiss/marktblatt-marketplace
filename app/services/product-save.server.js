@@ -1,5 +1,8 @@
 import db from "../db.server";
-
+import {
+  getVerifiedVendorShop,
+  assertVerifiedShopDomain,
+} from "./vendor-shop-domain.server";
 
 /*
  * =========================================================
@@ -198,6 +201,35 @@ export async function saveMarketplaceProduct({
       );
     }
 
+/*
+ * =====================================================
+ * VERIFIZIERTE SHOP-DOMAIN PRÜFEN
+ * =====================================================
+ */
+
+let verifiedShop;
+
+try {
+  verifiedShop = await getVerifiedVendorShop(customerId);
+
+  assertVerifiedShopDomain(
+    sourceUrl,
+    verifiedShop.shopUrl
+  );
+} catch (error) {
+  return cors(
+    Response.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Die Shop-Domain konnte nicht überprüft werden.",
+      },
+      { status: 403 }
+    )
+  );
+}
 
     /*
      * =====================================================
@@ -277,6 +309,26 @@ const importResult = await db.$transaction(async (tx) => {
     WHERE "customerId" = ${customerId}
     FOR UPDATE
   `;
+
+const currentVendor = await tx.vendorProfile.findUnique({
+  where: { customerId },
+  select: {
+    verificationStatus: true,
+    verificationShopUrl: true,
+  },
+});
+
+if (
+  currentVendor?.verificationStatus !== "verified" ||
+  !currentVendor.verificationShopUrl
+) {
+  throw new Error("VENDOR_NOT_VERIFIED");
+}
+
+assertVerifiedShopDomain(
+  sourceUrl,
+  currentVendor.verificationShopUrl
+);
 
   const currentSubscription = await tx.subscription.findUnique({
     where: { customerId },
@@ -842,7 +894,6 @@ return {
 
 const {
   savedProduct,
-  usedProducts,
   newUsedProducts,
   availableProducts,
   productLimit: currentProductLimit,
@@ -933,6 +984,19 @@ package: {
 const errorMessage =
   error instanceof Error ? error.message : "";
 
+if (errorMessage === "VENDOR_NOT_VERIFIED") {
+  return cors(
+    Response.json(
+      {
+        success: false,
+        error:
+          "Der Produktimport ist nur mit einer gültigen Anbieter-Verifizierung möglich.",
+      },
+      { status: 403 }
+    )
+  );
+}
+
 if (errorMessage === "SHOP_IMPORT_PACKAGE_REQUIRED") {
   return cors(
     Response.json(
@@ -1019,4 +1083,4 @@ if (errorMessage.startsWith("PRODUCT_ALREADY_EXISTS:")) {
       )
     );
   }
-};
+}

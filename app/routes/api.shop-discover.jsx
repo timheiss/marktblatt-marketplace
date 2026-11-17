@@ -1,8 +1,10 @@
 
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
+import { getVerifiedVendorShop } from "../services/vendor-shop-domain.server";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { Buffer } from "node:buffer";
 import http from "node:http";
 import https from "node:https";
 import * as cheerio from "cheerio";
@@ -252,10 +254,10 @@ export const action = async ({ request }) => {
       ));
     }
 
-    const body = await request.json();
-    const shopUrl = parseUrl(body?.url);
-    const origin = shopUrl.origin;
-    const hostname = shopUrl.hostname;
+const verifiedShop = await getVerifiedVendorShop(customerId);
+
+const origin = verifiedShop.origin;
+const hostname = verifiedShop.hostname;
 
     const queue = [
       `${origin}/sitemap.xml`,

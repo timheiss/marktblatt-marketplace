@@ -1,6 +1,6 @@
-﻿import '@shopify/ui-extensions/preact';
+import '@shopify/ui-extensions/preact';
 import {render} from 'preact';
-import {useEffect, useState} from 'preact/hooks';
+import {useEffect, useRef, useState} from 'preact/hooks';
 
 export default async () => {
   render(<Extension />, document.body);
@@ -18,6 +18,12 @@ const API_BASE_URL =
 
 
 function Extension() {
+  // Unabhängige Seitennavigation für Produktliste und Shop-Import.
+  const [productsPageSize, setProductsPageSize] = useState(100);
+  const [productsPage, setProductsPage] = useState(1);
+  const [importPageSize, setImportPageSize] = useState(100);
+  const [importPage, setImportPage] = useState(1);
+
 
   /*
    * =======================================================
@@ -38,6 +44,13 @@ const [packageData, setPackageData] = useState({
 
   const [loadingProducts, setLoadingProducts] =
     useState(true);
+
+  const productsPageCount = Math.max(1, Math.ceil(marketplaceProducts.length / productsPageSize));
+  const currentProductsPage = Math.min(productsPage, productsPageCount);
+  const visibleMarketplaceProducts = marketplaceProducts.slice(
+    (currentProductsPage - 1) * productsPageSize,
+    currentProductsPage * productsPageSize
+  );
 
 
   /*
@@ -64,14 +77,19 @@ const [packageData, setPackageData] = useState({
    * =======================================================
    */
 
-  const [shopImportUrl, setShopImportUrl] =
-    useState('');
-
+const [verifiedShopUrl, setVerifiedShopUrl] = useState('');
   const [shopImportSearching, setShopImportSearching] =
     useState(false);
 
   const [shopImportProducts, setShopImportProducts] =
     useState([]);
+
+  const importPageCount = Math.max(1, Math.ceil(shopImportProducts.length / importPageSize));
+  const currentImportPage = Math.min(importPage, importPageCount);
+  const visibleShopImportProducts = shopImportProducts.slice(
+    (currentImportPage - 1) * importPageSize,
+    currentImportPage * importPageSize
+  );
 
   const [shopImportSelected, setShopImportSelected] =
     useState([]);
@@ -116,27 +134,8 @@ const [shopImportErrors, setShopImportErrors] =
 
     setShopImportMessage(null);
     setShopImportProducts([]);
+    setImportPage(1);
     setShopImportSelected([]);
-
-    if (!shopImportUrl.trim()) {
-      setShopImportMessage(
-        'Bitte geben Sie die Adresse Ihres Onlineshops ein.'
-      );
-      return;
-    }
-
-    try {
-      const url = new URL(shopImportUrl.trim());
-
-      if (!['https:', 'http:'].includes(url.protocol)) {
-        throw new Error('Ungültiges URL-Protokoll.');
-      }
-    } catch {
-      setShopImportMessage(
-        'Bitte geben Sie eine gültige Shop-URL ein.'
-      );
-      return;
-    }
 
     try {
       setShopImportSearching(true);
@@ -151,9 +150,7 @@ const [shopImportErrors, setShopImportErrors] =
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            url: shopImportUrl.trim(),
-          }),
+body: JSON.stringify({}),
         }
       );
 
@@ -415,8 +412,12 @@ setShopImportPreviewLoading(true);
   const [deletingProductId, setDeletingProductId] =
     useState(null);
 
-  const [publishingProductId, setPublishingProductId] =
-    useState(null);
+  // Separate Statuswerte verhindern, dass parallele Übertragungen sich überschreiben.
+  const [publishingProductIds, setPublishingProductIds] = useState({});
+  const publishingIdsRef = useRef(new Set());
+  const [bulkPublishing, setBulkPublishing] = useState(false);
+  const bulkPublishingRef = useRef(false);
+  const [bulkPublishProgress, setBulkPublishProgress] = useState({done: 0, total: 0});
 
 const [changingCompareAtPrices, setChangingCompareAtPrices] =
   useState(false);
@@ -424,6 +425,40 @@ const [changingCompareAtPrices, setChangingCompareAtPrices] =
 const [bulkStatusAction, setBulkStatusAction] =
   useState(null);
 
+async function loadVerifiedShopUrl() {
+  try {
+    const token = await shopify.sessionToken.get();
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/vendor-profile`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(
+        data.error || 'Anbieterprofil konnte nicht geladen werden.'
+      );
+    }
+
+    const profile = data.profile;
+
+    setVerifiedShopUrl(
+      profile?.verificationStatus === 'verified'
+        ? profile?.verificationShopUrl || ''
+        : ''
+    );
+  } catch (error) {
+    console.error('VERIFIED SHOP LOAD ERROR:', error);
+    setVerifiedShopUrl('');
+  }
+}
 
   /*
    * =======================================================
@@ -433,8 +468,8 @@ const [bulkStatusAction, setBulkStatusAction] =
 
 useEffect(() => {
   loadProducts();
+  loadVerifiedShopUrl();
 }, []);
-
 
   /*
    * =======================================================
@@ -695,86 +730,90 @@ setPackageData({
    * =======================================================
    */
 
-  async function publishProduct(product) {
-    if (!product?.id) {
-      return;
+  async function publishProduct(product, {bulk = false} = {}) {
+    if (!product?.id || product.shopifyProductId ||
+        publishingIdsRef.current.has(product.id) ||
+        (!bulk && bulkPublishingRef.current)) {
+      return false;
     }
 
-    if (product.shopifyProductId) {
-      setSaveMessage(
-        'Dieses Produkt wurde bereits an Marktblatt übertragen.'
-      );
-
-      return;
+    // Ref wird synchron aktualisiert: auch schnelle Doppelklicks werden abgefangen.
+    publishingIdsRef.current.add(product.id);
+    setPublishingProductIds((current) => ({...current, [product.id]: true}));
+    if (!bulk) {
+      setError(null);
+      setSaveMessage(null);
     }
 
     try {
-      setPublishingProductId(
-        product.id
-      );
-
-      setError(null);
-      setSaveMessage(null);
-
-      const token =
-        await shopify.sessionToken.get();
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/product-publish`,
-        {
-          method: 'POST',
-
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-
-body: JSON.stringify({
-  productId: product.id,
-}),
-        }
-      );
-
-      const data =
-        await response.json();
-
+      const token = await shopify.sessionToken.get();
+      const response = await fetch(`${API_BASE_URL}/api/product-publish`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({productId: product.id}),
+      });
+      const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(
-          data.error ||
-            'Produkt konnte nicht an Marktblatt übertragen werden.'
-        );
+        throw new Error(data.error || 'Produkt konnte nicht an Marktblatt übertragen werden.');
       }
-
-      setSaveMessage(
-        data.message ||
-          'Produkt wurde erfolgreich an Marktblatt übertragen.'
-      );
-
-      /*
-       * Produktliste neu laden.
-       *
-       * Wenn api.product-publish die Shopify-IDs
-       * in MarketplaceProduct gespeichert hat,
-       * erscheint anschließend automatisch
-       * "Marktblatt: Übertragen".
-       */
-
-      await loadProducts();
-
+      if (!bulk) {
+        await loadProducts();
+        setSaveMessage(data.message || 'Produkt wurde erfolgreich an Marktblatt übertragen.');
+      }
+      return true;
     } catch (err) {
-      console.error(
-        'PRODUCT PUBLISH ERROR:',
-        err
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Produkt konnte nicht an Marktblatt übertragen werden.'
-      );
-
+      console.error('PRODUCT PUBLISH ERROR:', err);
+      if (!bulk) {
+        setError(err instanceof Error ? err.message :
+          'Produkt konnte nicht an Marktblatt übertragen werden.');
+      }
+      return false;
     } finally {
-      setPublishingProductId(null);
+      publishingIdsRef.current.delete(product.id);
+      setPublishingProductIds((current) => {
+        const next = {...current};
+        delete next[product.id];
+        return next;
+      });
+    }
+  }
+
+  async function publishAllProducts() {
+    if (bulkPublishingRef.current || publishingIdsRef.current.size > 0) return;
+    const pending = marketplaceProducts.filter((product) =>
+      product.id && !product.shopifyProductId && product.status !== 'deleted'
+    );
+    if (!pending.length) {
+      setSaveMessage('Alle Produkte wurden bereits an Marktblatt übertragen.');
+      return;
+    }
+
+    bulkPublishingRef.current = true;
+    setBulkPublishing(true);
+    setBulkPublishProgress({done: 0, total: pending.length});
+    setError(null);
+    setSaveMessage(null);
+    let succeeded = 0;
+    let failed = 0;
+    try {
+      // Nacheinander übertragen, um API-Last und doppelte Anfragen zu vermeiden.
+      for (const product of pending) {
+        const ok = await publishProduct(product, {bulk: true});
+        if (ok) succeeded += 1;
+        else failed += 1;
+        setBulkPublishProgress({done: succeeded + failed, total: pending.length});
+      }
+      setSaveMessage(`${succeeded} Produkte an Marktblatt übertragen, ${failed} fehlgeschlagen.`);
+    } finally {
+      try {
+        await loadProducts();
+      } finally {
+        bulkPublishingRef.current = false;
+        setBulkPublishing(false);
+      }
     }
   }
 
@@ -1286,6 +1325,17 @@ async function toggleProductStatus(product) {
 
 <s-button
   variant="primary"
+  onClick={publishAllProducts}
+  disabled={bulkPublishing || Object.keys(publishingProductIds).length > 0 ||
+    !marketplaceProducts.some((product) => product.id && !product.shopifyProductId && product.status !== 'deleted')}
+>
+  {bulkPublishing
+    ? `Wird übertragen (${bulkPublishProgress.done} von ${bulkPublishProgress.total})...`
+    : 'Alle an Marktblatt übertragen'}
+</s-button>
+
+<s-button
+  variant="primary"
   onClick={() =>
     changeAllProductStatuses('active')
   }
@@ -1351,26 +1401,32 @@ async function toggleProductStatus(product) {
             <s-section heading="Automatischer Shop-Import">
               <s-stack direction="block" gap="base">
 
-                <s-text>
-                  Geben Sie die Adresse Ihres Onlineshops ein.
-                  Marktblatt sucht automatisch nach Ihren
-                  Produktlinks.
-                </s-text>
+<s-text>
+  Marktblatt durchsucht automatisch Ihren
+  verifizierten Onlineshop nach verfügbaren
+  Produktlinks.
+</s-text>
 
-                <s-text-field
-                  label="Shop-URL"
-                  placeholder="https://www.ihr-shop.de"
-                  type="url"
-                  value={shopImportUrl}
-                  onInput={(event) => {
-                    setShopImportUrl(event.currentTarget.value);
-                  }}
-                />
+{verifiedShopUrl ? (
+  <s-stack direction="block" gap="small">
+    <s-text type="strong">
+      Verifizierter Onlineshop:
+    </s-text>
+
+    <s-text>
+      {verifiedShopUrl}
+    </s-text>
+  </s-stack>
+) : (
+  <s-text>
+    Keine verifizierte Shop-Adresse verfügbar.
+  </s-text>
+)}
 
                 <s-button
                   variant="primary"
                   onClick={searchShopProducts}
-                  disabled={shopImportSearching}
+                  disabled={shopImportSearching || !verifiedShopUrl}
                 >
                   {shopImportSearching
                     ? 'Produkte werden gesucht...'
@@ -1424,6 +1480,15 @@ async function toggleProductStatus(product) {
                         Gefundene Produkte: {shopImportProducts.length}
                       </s-text>
 
+                      <s-stack direction="inline" gap="small" wrap>
+                        <s-text>Pro Seite:</s-text>
+                        <s-button disabled={importPageSize === 100} onClick={() => { setImportPageSize(100); setImportPage(1); }}>100</s-button>
+                        <s-button disabled={importPageSize === 200} onClick={() => { setImportPageSize(200); setImportPage(1); }}>200</s-button>
+                        <s-button disabled={currentImportPage <= 1} onClick={() => setImportPage(currentImportPage - 1)}>Zurück</s-button>
+                        <s-text>Seite {currentImportPage} von {importPageCount}</s-text>
+                        <s-button disabled={currentImportPage >= importPageCount} onClick={() => setImportPage(currentImportPage + 1)}>Weiter</s-button>
+                      </s-stack>
+
                       <s-text>
                         Ausgewählt: {shopImportSelected.length} von maximal{' '}
                         {packageData.availableProducts} verfügbaren
@@ -1462,7 +1527,7 @@ async function toggleProductStatus(product) {
                       >
                         <s-stack direction="block" gap="small">
 
-                          {shopImportProducts.map((url, index) => {
+                          {visibleShopImportProducts.map((url, index) => {
 const alreadyImported = marketplaceProducts.some(
   (product) =>
     product.sourceUrl === url &&
@@ -1480,7 +1545,7 @@ const alreadyImported = marketplaceProducts.some(
   <s-stack key={url} direction="block" gap="small">
 <s-checkbox
   key={url}
-label={`${index + 1}. ${decodeURIComponent(
+label={`${(currentImportPage - 1) * importPageSize + index + 1}. ${decodeURIComponent(
     new URL(url).pathname.split('/').filter(Boolean).pop() || url
   ).replace(/-/g, ' ')}`}
   checked={selected && !alreadyImported}
@@ -1652,20 +1717,28 @@ label={`${index + 1}. ${decodeURIComponent(
                       )}
 
                       {shopImportRunning && (
+                        <s-banner tone="warning">
+                          Bitte lassen Sie diese Seite während des Imports geöffnet und aktualisieren Sie diese nicht.
+                        </s-banner>
+                      )}
+
+                      {shopImportRunning && (
                         <s-text>
                           Importiert: {shopImportProgress.imported} |
                           Fehlgeschlagen: {shopImportProgress.failed}
                         </s-text>
                       )}
 
-                      {!shopImportRunning &&
-                        shopImportProgress.total > 0 && (
-                          <s-text>
-                            Import abgeschlossen:
-                            {' '}{shopImportProgress.imported} erfolgreich,
-                            {' '}{shopImportProgress.failed} fehlgeschlagen.
-                          </s-text>
-                        )}
+
+{!shopImportRunning &&
+  shopImportProgress.total > 0 && (
+    <s-banner
+      tone={shopImportProgress.failed > 0 ? 'warning' : 'success'}
+    >
+      Import abgeschlossen: {shopImportProgress.imported} erfolgreich,
+      {' '}{shopImportProgress.failed} fehlgeschlagen.
+    </s-banner>
+  )}
 
 
                     </s-stack>
@@ -1926,12 +1999,22 @@ label={`${index + 1}. ${decodeURIComponent(
 
                 ) : (
 
+                  <>
+                  <s-stack direction="inline" gap="small" wrap>
+                    <s-text>Pro Seite:</s-text>
+                    <s-button disabled={productsPageSize === 100} onClick={() => { setProductsPageSize(100); setProductsPage(1); }}>100</s-button>
+                    <s-button disabled={productsPageSize === 200} onClick={() => { setProductsPageSize(200); setProductsPage(1); }}>200</s-button>
+                    <s-button disabled={currentProductsPage <= 1} onClick={() => setProductsPage(currentProductsPage - 1)}>Zurück</s-button>
+                    <s-text>Seite {currentProductsPage} von {productsPageCount}</s-text>
+                    <s-button disabled={currentProductsPage >= productsPageCount} onClick={() => setProductsPage(currentProductsPage + 1)}>Weiter</s-button>
+                  </s-stack>
+
                   <s-grid
                     gridTemplateColumns="repeat(4, minmax(0, 1fr))"
                     gap="base"
                   >
 
-                    {marketplaceProducts.map(
+                    {visibleMarketplaceProducts.map(
                       (product) => {
 
                         const statusChanging =
@@ -1943,8 +2026,7 @@ label={`${index + 1}. ${decodeURIComponent(
                           product.id;
 
                         const productPublishing =
-                          publishingProductId ===
-                          product.id;
+                          Boolean(publishingProductIds[product.id]);
 
                         const alreadyPublished =
                           Boolean(
@@ -1999,16 +2081,28 @@ label={`${index + 1}. ${decodeURIComponent(
                                     'Unbekannt'}
                                 </s-text>
 
-                                <s-text>
-                                  Status:{' '}
-                                  {product.status ===
-                                  'active'
-                                    ? 'Aktiv'
-                                    : product.status ===
-                                        'draft'
-                                      ? 'Entwurf'
-                                      : 'Inaktiv'}
-                                </s-text>
+                                <s-stack direction="inline" gap="small">
+                                   <s-text>Status:</s-text>
+
+
+
+{product.status === 'active' ? (
+  <s-banner tone="success">
+    Aktiv
+  </s-banner>
+) : product.status === 'inactive' ? (
+  <s-banner tone="critical">
+    Inaktiv
+  </s-banner>
+) : (
+  <s-banner tone="warning">
+    Entwurf
+  </s-banner>
+)}
+
+
+
+                                 </s-stack>
 
                                 <s-text>
                                   Marktblatt:{' '}
@@ -2052,6 +2146,7 @@ label={`${index + 1}. ${decodeURIComponent(
         statusChanging ||
         productDeleting ||
         productPublishing ||
+        bulkPublishing ||
         (
           product.adminLocked &&
           product.status !== 'active'
@@ -2082,7 +2177,8 @@ label={`${index + 1}. ${decodeURIComponent(
                                       disabled={
                                         statusChanging ||
                                         productDeleting ||
-                                        productPublishing
+                                        productPublishing ||
+                                        bulkPublishing
                                       }
                                     >
                                       {productPublishing
@@ -2124,6 +2220,16 @@ label={`${index + 1}. ${decodeURIComponent(
 
                   </s-grid>
 
+                  <s-stack direction="inline" gap="small" wrap>
+                    <s-text>Pro Seite:</s-text>
+                    <s-button disabled={productsPageSize === 100} onClick={() => { setProductsPageSize(100); setProductsPage(1); }}>100</s-button>
+                    <s-button disabled={productsPageSize === 200} onClick={() => { setProductsPageSize(200); setProductsPage(1); }}>200</s-button>
+                    <s-button disabled={currentProductsPage <= 1} onClick={() => setProductsPage(currentProductsPage - 1)}>Zurück</s-button>
+                    <s-text>Seite {currentProductsPage} von {productsPageCount}</s-text>
+                    <s-button disabled={currentProductsPage >= productsPageCount} onClick={() => setProductsPage(currentProductsPage + 1)}>Weiter</s-button>
+                  </s-stack>
+
+                  </>
                 )}
 
               </>
