@@ -1,4 +1,4 @@
-import '@shopify/ui-extensions/preact';
+﻿import '@shopify/ui-extensions/preact';
 import {render} from 'preact';
 import {useEffect, useRef, useState} from 'preact/hooks';
 
@@ -419,6 +419,17 @@ setShopImportPreviewLoading(true);
   const bulkPublishingRef = useRef(false);
   const [bulkPublishProgress, setBulkPublishProgress] = useState({done: 0, total: 0});
 
+  // Sammelaktualisierung bestehender Anbieterprodukte
+  const [bulkRefreshing, setBulkRefreshing] = useState(false);
+  const bulkRefreshingRef = useRef(false);
+  const [bulkRefreshProgress, setBulkRefreshProgress] = useState({
+    done: 0,
+    total: 0,
+    succeeded: 0,
+    failed: 0,
+  });
+  const [bulkRefreshErrors, setBulkRefreshErrors] = useState([]);
+
 const [changingCompareAtPrices, setChangingCompareAtPrices] =
   useState(false);
 
@@ -781,6 +792,106 @@ setPackageData({
     }
   }
 
+  async function refreshAllProducts() {
+    if (
+      bulkRefreshingRef.current ||
+      bulkPublishingRef.current ||
+      publishingIdsRef.current.size > 0
+    ) return;
+
+    const products = marketplaceProducts.filter(
+      (product) =>
+        product.id &&
+        product.status !== 'deleted' &&
+        product.sourceUrl
+    );
+
+    if (!products.length) {
+      setSaveMessage('Keine Produkte mit einer Quelladresse zur Aktualisierung vorhanden.');
+      return;
+    }
+
+    bulkRefreshingRef.current = true;
+    setBulkRefreshing(true);
+    setBulkRefreshProgress({
+      done: 0,
+      total: products.length,
+      succeeded: 0,
+      failed: 0,
+    });
+    setBulkRefreshErrors([]);
+    setError(null);
+    setSaveMessage(null);
+
+    let succeeded = 0;
+    let failed = 0;
+    const errors = [];
+
+    try {
+      for (const product of products) {
+        try {
+          const token = await shopify.sessionToken.get();
+
+          const response = await fetch(
+            `${API_BASE_URL}/api/product-refresh`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({productId: product.id}),
+            }
+          );
+
+          const data = await response.json();
+
+          if (!response.ok || !data.success) {
+            throw new Error(
+              data.error || 'Produkt konnte nicht aktualisiert werden.'
+            );
+          }
+
+          succeeded += 1;
+        } catch (err) {
+          failed += 1;
+          errors.push({
+            productId: product.id,
+            title: product.title || product.id,
+            message: err?.message || 'Unbekannter Fehler',
+          });
+          console.error('PRODUCT REFRESH ERROR:', product.id, err);
+        }
+
+        setBulkRefreshProgress({
+          done: succeeded + failed,
+          total: products.length,
+          succeeded,
+          failed,
+        });
+      }
+
+      setBulkRefreshErrors(errors);
+      setSaveMessage(
+        `${succeeded} Produkte aktualisiert, ${failed} fehlgeschlagen.`
+      );
+    } catch (err) {
+      setError(
+        err?.message || 'Die Sammelaktualisierung ist fehlgeschlagen.'
+      );
+    } finally {
+      try {
+        await loadProducts();
+      } catch (err) {
+        setError(
+          err?.message || 'Die Produktliste konnte nicht neu geladen werden.'
+        );
+      } finally {
+        bulkRefreshingRef.current = false;
+        setBulkRefreshing(false);
+      }
+    }
+  }
   async function publishAllProducts() {
     if (bulkPublishingRef.current || publishingIdsRef.current.size > 0) return;
     const pending = marketplaceProducts.filter((product) =>
@@ -1325,13 +1436,23 @@ async function toggleProductStatus(product) {
 
 <s-button
   variant="primary"
-  onClick={publishAllProducts}
-  disabled={bulkPublishing || Object.keys(publishingProductIds).length > 0 ||
-    !marketplaceProducts.some((product) => product.id && !product.shopifyProductId && product.status !== 'deleted')}
+  onClick={refreshAllProducts}
+  disabled={
+    bulkRefreshing ||
+    bulkPublishing ||
+    bulkStatusAction !== null ||
+    loadingProducts ||
+    !marketplaceProducts.some(
+      (product) =>
+        product.id &&
+        product.status !== 'deleted' &&
+        product.sourceUrl
+    )
+  }
 >
-  {bulkPublishing
-    ? `Wird übertragen (${bulkPublishProgress.done} von ${bulkPublishProgress.total})...`
-    : 'Alle an Marktblatt übertragen'}
+  {bulkRefreshing
+    ? `Aktualisiere ${bulkRefreshProgress.done} von ${bulkRefreshProgress.total}...`
+    : 'Alle aktualisieren'}
 </s-button>
 
 <s-button
@@ -1952,14 +2073,31 @@ label={`${(currentImportPage - 1) * importPageSize + index + 1}. ${decodeURIComp
 
         )}
 
-{/* ERFOLGSMELDUNG */}
+{/* ERFOLGS- UND STATUSMELDUNG */}
 
 {saveMessage && (
   <s-banner
-    tone="success"
-    heading="Erfolgreich"
+    tone={bulkRefreshErrors.length > 0 ? 'warning' : 'success'}
+    heading={bulkRefreshErrors.length > 0 ? 'Teilweise aktualisiert' : 'Erfolgreich'}
   >
     {saveMessage}
+  </s-banner>
+)}
+
+{/* FEHLERÜBERSICHT SAMMELAKTUALISIERUNG */}
+
+{bulkRefreshErrors.length > 0 && (
+  <s-banner
+    tone="critical"
+    heading={`${bulkRefreshErrors.length} Produkte konnten nicht aktualisiert werden`}
+  >
+    <s-stack direction="block" gap="small">
+      {bulkRefreshErrors.map((item) => (
+        <s-text key={item.productId}>
+          {item.title}: {item.message}
+        </s-text>
+      ))}
+    </s-stack>
   </s-banner>
 )}
 
@@ -1967,6 +2105,25 @@ label={`${(currentImportPage - 1) * importPageSize + index + 1}. ${decodeURIComp
         {/* PRODUKTLISTE */}
 
         <s-section heading="Ihre Produkte">
+
+          <s-button
+            variant="primary"
+            onClick={publishAllProducts}
+            disabled={
+              bulkPublishing ||
+              Object.keys(publishingProductIds).length > 0 ||
+              !marketplaceProducts.some(
+                (product) =>
+                  product.id &&
+                  !product.shopifyProductId &&
+                  product.status !== 'deleted'
+              )
+            }
+          >
+            {bulkPublishing
+              ? `Wird übertragen (${bulkPublishProgress.done} von ${bulkPublishProgress.total})...`
+              : 'Alle an Marktblatt übertragen'}
+          </s-button>
 
           <s-stack
             direction="block"
@@ -2245,4 +2402,10 @@ label={`${(currentImportPage - 1) * importPageSize + index + 1}. ${decodeURIComp
     </s-page>
   );
 }
+
+
+
+
+
+
 
