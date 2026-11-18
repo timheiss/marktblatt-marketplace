@@ -1,4 +1,4 @@
-import db from "../db.server";
+﻿import db from "../db.server";
 import sanitizeHtml from "sanitize-html";
 import { getVerifiedVendorShop, assertVerifiedShopDomain } from "../services/vendor-shop-domain.server";
 import { secureDownloadHtml } from "../services/secure-product-fetch.server";
@@ -7,6 +7,16 @@ import {
   authenticate,
   unauthenticated,
 } from "../shopify.server";
+
+export const loader = async ({ request }) => {
+  if (request.method !== "OPTIONS") {
+    return new Response(null, { status: 405 });
+  }
+
+  const { cors } = await authenticate.public.customerAccount(request);
+
+  return cors(new Response(null, { status: 204 }));
+};
 
 export const action = async ({ request }) => {
   let cors = (response) => response;
@@ -631,5 +641,6 @@ export const action = async ({ request }) => {
     }, { status: 500 }));
   }
 };
+
 
 
