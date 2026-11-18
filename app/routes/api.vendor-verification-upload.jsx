@@ -183,7 +183,7 @@ export const action = async ({ request }) => {
     }
 
     if (
-      !["not_submitted", "rejected"].includes(
+      !["not_submitted", "rejected", "unverified"].includes(
         profile.verificationStatus
       )
     ) {
@@ -344,7 +344,7 @@ const file = formData.get("document");
         where: {
           customerId,
           verificationStatus: {
-            in: ["not_submitted", "rejected"],
+            in: ["not_submitted", "rejected", "unverified"],
           },
           verificationDocumentKey:
             profile.verificationDocumentKey,

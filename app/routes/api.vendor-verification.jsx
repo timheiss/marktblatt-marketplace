@@ -161,7 +161,7 @@ export const action = async ({ request }) => {
       }
 
       if (
-        !["not_submitted", "rejected"].includes(
+        !["not_submitted", "rejected", "unverified"].includes(
           profile.verificationStatus
         )
       ) {
@@ -200,7 +200,7 @@ export const action = async ({ request }) => {
         where: {
           customerId,
           verificationStatus: {
-            in: ["not_submitted", "rejected"],
+            in: ["not_submitted", "rejected", "unverified"],
           },
           verificationCompanyName:
             profile.verificationCompanyName,
@@ -327,7 +327,7 @@ export const action = async ({ request }) => {
       where: {
         customerId,
         verificationStatus: {
-          in: ["not_submitted", "rejected"],
+          in: ["not_submitted", "rejected", "unverified"],
         },
       },
       data: {
