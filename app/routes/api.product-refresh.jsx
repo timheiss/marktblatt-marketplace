@@ -161,7 +161,13 @@ export const action = async ({ request }) => {
         }, { status: 401 }));
       }
 
-      const shopUrl = new URL(destination);
+      const normalizedDestination = String(destination).trim();
+
+const shopUrl = new URL(
+  normalizedDestination.includes("://")
+    ? normalizedDestination
+    : `https://${normalizedDestination}`
+);
 
       if (
         shopUrl.protocol !== "https:" ||
@@ -641,6 +647,7 @@ export const action = async ({ request }) => {
     }, { status: 500 }));
   }
 };
+
 
 
 
