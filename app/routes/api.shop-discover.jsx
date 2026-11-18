@@ -1,4 +1,4 @@
-
+﻿
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
 import { getVerifiedVendorShop } from "../services/vendor-shop-domain.server";
@@ -198,6 +198,13 @@ function normalizeProductUrl(input) {
     url.searchParams.delete(param);
   }
 
+  // Sprachpräfix bei Shopify-Produkt-URLs entfernen.
+  // Nur bekannte Sprachpräfixe und Produktpfade berücksichtigen.
+  url.pathname = url.pathname.replace(
+    /^\/(?:en|de|fr|es|it|nl)\/(?=(?:products|collections)\/)/i,
+    "/"
+  );
+
   // Shopify-Kollektionspfade vereinheitlichen
   const match = url.pathname.match(
     /^\/collections\/[^/]+\/products\/([^/]+)\/?$/i
@@ -218,7 +225,11 @@ function normalizeProductUrl(input) {
 }
 
 function looksLikeProduct(url, productSitemap) {
-  if (url.pathname === "/" || url.pathname === "") {
+  if (
+    url.pathname === "/" ||
+    url.pathname === "" ||
+    /^\/(?:en|de|fr|es|it|nl)\/?$/i.test(url.pathname)
+  ) {
     return false;
   }
 
@@ -422,3 +433,6 @@ const hostname = verifiedShop.hostname;
     ));
   }
 };
+
+
+
