@@ -180,6 +180,43 @@ async function fetchText(input, hostname, redirects = 0) {
   });
 }
 
+function normalizeProductUrl(input) {
+  const url = new URL(input);
+
+  // Trackingparameter entfernen
+  const trackingParams = [
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_term",
+    "utm_content",
+    "fbclid",
+    "gclid",
+  ];
+
+  for (const param of trackingParams) {
+    url.searchParams.delete(param);
+  }
+
+  // Shopify-Kollektionspfade vereinheitlichen
+  const match = url.pathname.match(
+    /^\/collections\/[^/]+\/products\/([^/]+)\/?$/i
+  );
+
+  if (match) {
+    url.pathname = `/products/${match[1]}`;
+  }
+
+  // Abschließenden Schrägstrich entfernen
+  if (url.pathname.length > 1) {
+    url.pathname = url.pathname.replace(/\/+$/, "");
+  }
+
+  url.hash = "";
+
+  return url.href;
+}
+
 function looksLikeProduct(url, productSitemap) {
   if (url.pathname === "/" || url.pathname === "") {
     return false;
@@ -352,7 +389,7 @@ const hostname = verifiedShop.hostname;
             sameShop(productUrl, hostname) &&
             looksLikeProduct(productUrl, isProductSitemap)
           ) {
-            products.add(productUrl.href);
+            products.add(normalizeProductUrl(productUrl.href));
           }
         } catch {
           // Ungültige Produkt-URL ignorieren.
