@@ -1743,7 +1743,7 @@ function getCompareAtPrice(
  * Relative Links werden in absolute URLs umgewandelt.
  */
 
-function extractVendorLinks(
+export function extractVendorLinks(
   html,
   pageUrl
 ) {
@@ -2748,5 +2748,6 @@ itemGroupId,
  * API ACTION
  * =========================================================
  */
+
 
 

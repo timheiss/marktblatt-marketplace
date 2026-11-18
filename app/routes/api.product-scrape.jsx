@@ -7,7 +7,7 @@ import {
   assertVerifiedShopDomain,
 } from "../services/vendor-shop-domain.server";
 import { secureDownloadHtml } from "../services/secure-product-fetch.server";
-import { extractProduct } from "../services/product-extraction.server";
+import { extractProduct, extractVendorLinks } from "../services/product-extraction.server";
 
 
 /*
@@ -587,4 +587,5 @@ export async function loader({ request }) {
     }
   );
 }
+
 
