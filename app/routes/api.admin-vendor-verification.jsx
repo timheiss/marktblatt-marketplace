@@ -173,7 +173,7 @@ export const action = async ({ request }) => {
     );
   }
 
-  if (!["verified", "rejected"].includes(decision)) {
+  if (!["verified", "rejected", "unverified"].includes(decision)) {
     return respond(
       { success: false, error: "Ungültige Entscheidung." },
       400
@@ -213,20 +213,26 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const result = await db.vendorProfile.updateMany({
-      where: {
-        customerId,
-        verificationStatus: "pending",
-        verificationDocumentKey: { not: null },
-        verificationCompanyName: { not: null },
-        verificationShopUrl: { not: null },
-      },
-      data: {
-        verificationStatus: decision,
-        verificationReviewedAt: new Date(),
-        verificationReviewNote: note || null,
-      },
-    });
+const result = await db.vendorProfile.updateMany({
+  where:
+    decision === "unverified"
+      ? {
+          customerId,
+          verificationStatus: "verified",
+        }
+      : {
+          customerId,
+          verificationStatus: "pending",
+          verificationDocumentKey: { not: null },
+          verificationCompanyName: { not: null },
+          verificationShopUrl: { not: null },
+        },
+  data: {
+    verificationStatus: decision,
+    verificationReviewedAt: new Date(),
+    verificationReviewNote: note || null,
+  },
+});
 
     if (result.count !== 1) {
       return respond(
