@@ -1,3 +1,4 @@
+import { getShippingOriginLabel } from "../services/shipping-origin.server";
 import db from "../db.server";
 import sanitizeHtml from "sanitize-html";
 import {
@@ -154,9 +155,9 @@ media.push({
    * Bisherige allgemeine Produktbilder übernehmen.
    * Maximal fünf allgemeine Bilder.
    */
-  for (const image of images.slice(0, 5)) {
-    addImage(image);
-  }
+for (const image of images.slice(0, 3)) {
+  addImage(image);
+}
 
   /*
    * Zusätzlich sämtliche Variantenbilder übernehmen.
@@ -2391,6 +2392,42 @@ status:
 /*
  * Informationen ÃƒÂ¼ber den Anbieter
  */
+/*
+ * Firmenlogo Querformat (2:1)
+ */
+...(vendorProfile?.companyLogoWideId
+  ? [{
+      namespace: "custom",
+      key: "firmenlogo_im_querformat_2_1",
+      type: "file_reference",
+      value: String(vendorProfile.companyLogoWideId).trim(),
+    }]
+  : []),
+
+/*
+ * Firmenlogo Quadrat (1:1)
+ */
+...(vendorProfile?.companyLogoSquareId
+  ? [{
+      namespace: "custom",
+      key: "firmenlogo_im_quadrat_1_1",
+      type: "file_reference",
+      value: String(vendorProfile.companyLogoSquareId).trim(),
+    }]
+  : []),
+
+/*
+ * Versandland
+ */
+...(vendorProfile?.shippingOrigin?.trim()
+  ? [{
+      namespace: "custom",
+      key: "versandland",
+      type: "single_line_text_field",
+      value: getShippingOriginLabel(vendorProfile.shippingOrigin),
+    }]
+  : []),
+
 ...(vendorProfile?.companyDescription
   ? [
       {

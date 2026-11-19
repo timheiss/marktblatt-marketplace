@@ -433,7 +433,7 @@ if (!showLoading) {
   }
 
   return (
-    <s-page heading="Anbieterinformationen">
+    <s-page heading="Mein Shop">
       <s-section heading="Anbieterinformationen">
         <s-stack direction="block" gap="base">
           <s-text>
