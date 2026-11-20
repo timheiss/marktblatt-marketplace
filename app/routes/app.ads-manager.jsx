@@ -1927,6 +1927,81 @@ googleOAuthFetcher.submit(formData, {
 </s-paragraph>
 </s-section>
 
+<s-section heading="Google Ads Ausgabenprüfung">
+  <s-paragraph>
+    Übersicht der tatsächlichen Google Ads-Ausgaben
+    des Marktblatt-Werbekontos für den laufenden Monat.
+  </s-paragraph>
+
+  {googleAdsConnected ? (
+    <>
+      {googleAdsCampaignsError ? (
+        <s-banner tone="critical">
+          Die Google Ads-Ausgaben konnten nicht geladen werden.
+        </s-banner>
+      ) : (
+        <>
+          <s-paragraph>
+            Gefundene Kampagnen: {googleAdsCampaigns.length}
+          </s-paragraph>
+
+          <s-table>
+            <s-table-header-row>
+              <s-table-header>Kampagne</s-table-header>
+              <s-table-header>Kampagnen-ID</s-table-header>
+              <s-table-header>Status</s-table-header>
+              <s-table-header>Monatsausgaben</s-table-header>
+            </s-table-header-row>
+
+            <s-table-body>
+              {googleAdsCampaigns.map((campaign) => (
+                <s-table-row key={campaign.id}>
+                  <s-table-cell>{campaign.name}</s-table-cell>
+                  <s-table-cell>{campaign.id}</s-table-cell>
+                  <s-table-cell>{campaign.status}</s-table-cell>
+                  <s-table-cell>
+                    {campaign.spentThisMonthEuros.toLocaleString(
+                      "de-DE",
+                      {
+                        style: "currency",
+                        currency: "EUR",
+                      }
+                    )}
+                  </s-table-cell>
+                </s-table-row>
+              ))}
+            </s-table-body>
+          </s-table>
+
+          <s-paragraph>
+            Gesamtausgaben aller angezeigten Kampagnen:{" "}
+            {googleAdsCampaigns
+              .reduce(
+                (sum, campaign) =>
+                  sum + campaign.spentThisMonthEuros,
+                0
+              )
+              .toLocaleString("de-DE", {
+                style: "currency",
+                currency: "EUR",
+              })}
+          </s-paragraph>
+        </>
+      )}
+    </>
+  ) : (
+    <s-paragraph>
+      Google Ads ist noch nicht verbunden.
+    </s-paragraph>
+  )}
+
+  <s-paragraph>
+    Die Ausgaben werden beim Laden der Seite aus
+    Google Ads abgerufen. Es erfolgt noch keine
+    automatische Synchronisierung mit den
+    Anbieterbudgets in PostgreSQL.
+  </s-paragraph>
+</s-section>
 <s-section heading="Google Ads – Notfallsteuerung">
 
   <s-paragraph>
