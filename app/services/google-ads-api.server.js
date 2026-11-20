@@ -252,9 +252,7 @@ export async function listMarktblattGoogleAdsCampaigns(shop) {
     connection?.status !== "connected" ||
     !connection.encryptedRefreshToken
   ) {
-    throw new Error(
-      "Google Ads: Keine aktive Verbindung vorhanden."
-    );
+    throw new Error("Google Ads: Keine aktive Verbindung vorhanden.");
   }
 
   const refreshToken = decryptGoogleToken(
@@ -279,50 +277,114 @@ export async function listMarktblattGoogleAdsCampaigns(shop) {
     ORDER BY campaign.id
   `;
 
-  const response = await fetch(
-    `https://googleads.googleapis.com/v25/customers/${customerId}/googleAds:search`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "login-customer-id": MARKTBLATT_GOOGLE_ADS_MANAGER_ID,
-        "Content-Type": "application/json",
-      },
-body: JSON.stringify({ query }),
-      signal: AbortSignal.timeout(15000),
+  const campaigns = [];
+  const seenIds = new Set();
+  const seenPageTokens = new Set();
+  let pageToken = null;
+
+  do {
+    const response = await fetch(
+      `https://googleads.googleapis.com/v25/customers/${customerId}/googleAds:search`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "login-customer-id": MARKTBLATT_GOOGLE_ADS_MANAGER_ID,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query,
+          ...(pageToken ? { pageToken } : {}),
+        }),
+        signal: AbortSignal.timeout(15000),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Google Ads: Kampagnenabruf fehlgeschlagen (HTTP ${response.status}).`
+      );
     }
-  );
 
-  if (!response.ok) {
-    const errorText = await response.text();
+    const data = await response.json();
 
-    console.error(
-      "Google Ads Kampagnenabfrage:",
-      response.status,
-      errorText.slice(0, 1500)
-    );
+    if (!Array.isArray(data.results)) {
+      throw new Error("Google Ads: Ungültige Kampagnenantwort.");
+    }
 
-    throw new Error(
-      `Google Ads: Kampagnenabruf fehlgeschlagen (HTTP ${response.status}).`
-    );
-  }
+    for (const result of data.results) {
+      const campaign = result.campaign;
+      const id = String(campaign?.id ?? "");
 
-  const data = await response.json();
+      if (
+        !/^[1-9]\d*$/.test(id) ||
+        typeof campaign?.name !== "string" ||
+        !campaign.status
+      ) {
+        throw new Error("Google Ads: Unvollständige Kampagnendaten.");
+      }
 
-  return (data.results ?? []).map((result) => ({
-    id: String(result.campaign?.id ?? ""),
-    name: result.campaign?.name ?? "Ohne Kampagnennamen",
-    status: result.campaign?.status ?? "UNKNOWN",
-    type:
-      result.campaign?.advertisingChannelType ?? "UNKNOWN",
-    dailyBudgetEuros:
-      Number(result.campaignBudget?.amountMicros ?? 0) /
-      1000000,
-    spentThisMonthEuros:
-      Number(result.metrics?.costMicros ?? 0) / 1000000,
-  }));
+      if (seenIds.has(id)) {
+        throw new Error("Google Ads: Kampagne mehrfach zurückgegeben.");
+      }
+
+      seenIds.add(id);
+
+      const rawCostMicros = result.metrics?.costMicros;
+
+      if (
+        rawCostMicros === undefined ||
+        rawCostMicros === null ||
+        !/^\d+$/.test(String(rawCostMicros))
+      ) {
+        throw new Error("Google Ads: Ungültige Monatsausgaben.");
+      }
+
+      const costMicros = BigInt(rawCostMicros);
+
+      const rawBudgetMicros =
+        result.campaignBudget?.amountMicros;
+
+      if (
+        rawBudgetMicros === undefined ||
+        rawBudgetMicros === null ||
+        !/^\d+$/.test(String(rawBudgetMicros))
+      ) {
+        throw new Error("Google Ads: Ungültiges Kampagnenbudget.");
+      }
+
+      const budgetMicros = BigInt(rawBudgetMicros);
+
+      if (
+        costMicros > BigInt(Number.MAX_SAFE_INTEGER) ||
+        budgetMicros > BigInt(Number.MAX_SAFE_INTEGER)
+      ) {
+        throw new Error("Google Ads: Betrag außerhalb des gültigen Bereichs.");
+      }
+
+      campaigns.push({
+        id,
+        name: campaign.name,
+        status: campaign.status,
+        type: campaign.advertisingChannelType ?? "UNKNOWN",
+        dailyBudgetEuros: Number(budgetMicros) / 1000000,
+        spentThisMonthEuros: Number(costMicros) / 1000000,
+      });
+    }
+
+    pageToken = data.nextPageToken || null;
+
+    if (pageToken) {
+      if (seenPageTokens.has(pageToken)) {
+        throw new Error("Google Ads: Wiederholter Seiten-Token.");
+      }
+
+      seenPageTokens.add(pageToken);
+    }
+  } while (pageToken);
+
+  return campaigns;
 }
-
 /**
  * Erstellt einen eindeutigen Kampagnennamen
  * anhand der Shopify-Anbieter-ID.
