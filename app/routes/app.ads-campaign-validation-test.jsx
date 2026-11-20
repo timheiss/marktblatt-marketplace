@@ -1,3 +1,4 @@
+import { checkMarktblattVendorCampaignDuplicate, listAllMarktblattGoogleAdsCampaigns } from "../services/google-ads-api.server";
 import prisma from "../db.server";
 import { authenticateAdsAdmin } from "../services/ads-admin-auth.server";
 import { validateMarktblattCampaignCreation } from "../services/ads-campaign-create.server";
@@ -10,7 +11,7 @@ import { validateMarktblattCampaignCreation } from "../services/ads-campaign-cre
  * Keine Kampagnenerstellung.
  */
 export const loader = async ({ request }) => {
-  const { admin } = await authenticateAdsAdmin(request);
+  const { admin, session } = await authenticateAdsAdmin(request);
 
   try {
     const mappings = await prisma.adsVendorCampaign.findMany({
@@ -24,6 +25,21 @@ export const loader = async ({ request }) => {
       },
     });
 
+    // Ausschließlich lesender Google-Ads-Zugriff.
+    // Bei einem API-Fehler wird keine Freigabe erteilt.
+    let googleAdsCampaigns = null;
+    let googleAdsError = null;
+
+    try {
+      googleAdsCampaigns =
+        await listAllMarktblattGoogleAdsCampaigns(session.shop);
+    } catch (error) {
+      googleAdsError = error;
+      console.error(
+        "Google-Ads-Duplikatprüfung fehlgeschlagen:",
+        error.message
+      );
+    }
     const results = [];
 
     for (const mapping of mappings) {
@@ -32,6 +48,25 @@ export const loader = async ({ request }) => {
           customerId: mapping.customerId,
           admin,
         });
+
+        if (googleAdsError || !Array.isArray(googleAdsCampaigns)) {
+          throw new Error(
+            "Google-Ads-Kampagnen konnten nicht vollständig geprüft werden."
+          );
+        }
+
+        const duplicate = checkMarktblattVendorCampaignDuplicate({
+          customerId: mapping.customerId,
+          googleAdsCustomerId: "2908836119",
+          existingMapping: mapping,
+          googleAdsCampaigns,
+        });
+
+        if (!duplicate.canCreate) {
+          throw new Error(
+            `Google-Ads-Kampagnenerstellung blockiert: ${duplicate.reason}`
+          );
+        }
 
         results.push({
           customerId: mapping.customerId,
