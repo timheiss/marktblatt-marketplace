@@ -22,6 +22,9 @@ export const loader = async ({ request }) => {
       },
       select: {
         customerId: true,
+        googleAdsCustomerId: true,
+        googleCampaignId: true,
+        status: true,
       },
     });
 
