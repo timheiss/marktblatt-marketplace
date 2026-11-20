@@ -4,8 +4,7 @@ import { authenticate } from "../shopify.server";
 const ALLOWED_SHOP = "0yr6cb-b4.myshopify.com";
 
 export async function authenticateAdsAdmin(request) {
-  const { session, sessionToken } =
-    await authenticate.admin(request);
+  const { session, sessionToken, admin } = await authenticate.admin(request);
 
   if (session?.shop?.toLowerCase() !== ALLOWED_SHOP) {
     throw new Response(
@@ -30,5 +29,5 @@ export async function authenticateAdsAdmin(request) {
     );
   }
 
-  return { session };
+  return { session, admin };
 }
