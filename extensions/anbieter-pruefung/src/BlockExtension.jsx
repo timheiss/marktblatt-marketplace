@@ -1,4 +1,4 @@
-import '@shopify/ui-extensions/preact';
+﻿import '@shopify/ui-extensions/preact';
 import {render} from 'preact';
 import {useEffect, useState} from 'preact/hooks';
 const API_BASE_URL = 'https://marktblatt-marketplace.onrender.com';
@@ -22,6 +22,7 @@ const [reviewNote, setReviewNote] = useState('');
 const [reviewing, setReviewing] = useState(false);
 const [reviewError, setReviewError] = useState('');
 const [reviewSuccess, setReviewSuccess] = useState('');
+const [confirmRevocation, setConfirmRevocation] = useState(false);
 
 useEffect(() => {
   let active = true;
@@ -154,7 +155,11 @@ async function reviewVendor(decision) {
   if (
     !customerId ||
     reviewing ||
-    verification?.status !== 'pending'
+    (
+  decision === 'unverified'
+    ? verification?.status !== 'verified' || !confirmRevocation
+    : verification?.status !== 'pending'
+)
   ) {
     return;
   }
@@ -209,11 +214,15 @@ async function reviewVendor(decision) {
       reviewedAt: new Date().toISOString(),
     }));
 
-    setReviewSuccess(
-      decision === 'verified'
-        ? 'Der Anbieter wurde erfolgreich freigegeben.'
-        : 'Der Anbieter wurde abgelehnt.'
-    );
+setReviewSuccess(
+  decision === 'verified'
+    ? 'Der Anbieter wurde erfolgreich freigegeben.'
+    : decision === 'unverified'
+      ? 'Die Anbieter-Verifizierung wurde aufgehoben.'
+      : 'Der Anbieter wurde abgelehnt.'
+);
+
+setConfirmRevocation(false);
 
     setReviewNote('');
   } catch (error) {
@@ -339,6 +348,44 @@ async function reviewVendor(decision) {
           </s-button>
         </s-stack>
       </>
+    )}
+
+    {verification.status === 'verified' && (
+      <s-stack direction="block" gap="small">
+        {!confirmRevocation ? (
+          <s-button
+            tone="critical"
+            disabled={reviewing}
+            onClick={() => setConfirmRevocation(true)}
+          >
+            Verifizierung aufheben
+          </s-button>
+        ) : (
+          <>
+            <s-banner tone="warning">
+              Möchten Sie die Anbieter-Verifizierung wirklich aufheben?
+              Bereits veröffentlichte Produkte bleiben online.
+            </s-banner>
+
+            <s-stack direction="inline" gap="small">
+              <s-button
+                tone="critical"
+                disabled={reviewing}
+                onClick={() => reviewVendor('unverified')}
+              >
+                {reviewing ? 'Wird aufgehoben...' : 'Ja, Verifizierung aufheben'}
+              </s-button>
+
+              <s-button
+                disabled={reviewing}
+                onClick={() => setConfirmRevocation(false)}
+              >
+                Abbrechen
+              </s-button>
+            </s-stack>
+          </>
+        )}
+      </s-stack>
     )}
 
     {reviewError && (

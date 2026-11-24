@@ -1,4 +1,4 @@
-﻿import '@shopify/ui-extensions/preact';
+import '@shopify/ui-extensions/preact';
 import {render} from 'preact';
 import {useEffect, useRef, useState} from 'preact/hooks';
 
@@ -17,6 +17,41 @@ const API_BASE_URL =
   'https://marktblatt-marketplace.onrender.com';
 
 
+function normalizeProductUrl(input) {
+  try {
+    const url = new URL(input);
+
+    for (const param of [
+      "utm_source", "utm_medium", "utm_campaign",
+      "utm_term", "utm_content", "fbclid", "gclid"
+    ]) {
+      url.searchParams.delete(param);
+    }
+
+    // Sprachvarianten derselben Produkt-URL zusammenführen
+    url.pathname = url.pathname.replace(
+      /^\/(?:en|de|fr|es|it|nl)\/(?=(?:products|collections)\/)/i,
+      "/"
+    );
+
+    const match = url.pathname.match(
+      /^\/collections\/[^/]+\/products\/([^/]+)\/?$/i
+    );
+
+    if (match) {
+      url.pathname = `/products/${match[1]}`;
+    }
+
+    if (url.pathname.length > 1) {
+      url.pathname = url.pathname.replace(/\/+$/, "");
+    }
+
+    url.hash = "";
+    return url.href;
+  } catch {
+    return String(input || "");
+  }
+}
 function Extension() {
   // Unabhängige Seitennavigation für Produktliste und Shop-Import.
   const [productsPageSize, setProductsPageSize] = useState(100);
@@ -196,12 +231,12 @@ async function importSelectedShopProducts() {
   const importedUrls = new Set(
     marketplaceProducts
       .filter((product) => product.status !== 'deleted')
-      .map((product) => product.sourceUrl)
+      .map((product) => normalizeProductUrl(product.sourceUrl))
       .filter(Boolean)
   );
 
   const urls = [...new Set(shopImportSelected)].filter(
-    (url) => !importedUrls.has(url)
+    (url) => !importedUrls.has(normalizeProductUrl(url))
   );
 
   if (urls.length === 0) {
@@ -1409,23 +1444,32 @@ async function toggleProductStatus(product) {
 </s-box>
 
     <s-text>
-      1. Fügen Sie die URL eines Produkts aus Ihrem
-      Onlineshop hinzu.
+      1. Produkte finden: Durchsuchen Sie Ihren verifizierten Onlineshop
+      automatisch oder fügen Sie einzelne Produkt-URLs hinzu.
     </s-text>
 
     <s-text>
-      2. Prüfen Sie die Produktdaten und übertragen Sie
-      das Produkt anschließend an Marktblatt.
+      2. Produkte übernehmen: Wählen Sie Produkte aus, prüfen Sie die
+      Vorschau und speichern Sie die gewünschten Produkte bei Marktblatt.
     </s-text>
 
     <s-text>
-      3. Aktivieren Sie das Produkt, damit es auf
-      Marktblatt veröffentlicht wird.
+      3. Produkte übertragen und aktivieren: Übertragen Sie gespeicherte
+      Produkte einzeln oder gemeinsam an Marktblatt und aktivieren Sie sie
+      anschließend zur Veröffentlichung.
     </s-text>
 
     <s-text>
-      4. Deaktivierte Produkte bleiben gespeichert und
-      können jederzeit wieder aktiviert werden.
+      4. Produkte aktualisieren: Mit „Alle aktualisieren“ übernehmen Sie
+      aktuelle Produktinformationen und Preise aus Ihrem Onlineshop.
+      Bestehende Produktbilder bleiben dabei unverändert.
+    </s-text>
+
+    <s-text>
+      5. Produkte verwalten: Aktivieren oder deaktivieren Sie Ihre
+      übertragenen Produkte einzeln oder gemeinsam. Durch Marktblatt
+      gesperrte Produkte können nur vom Marktblatt-Support wieder
+      aktiviert werden.
     </s-text>
 
 
@@ -1534,14 +1578,15 @@ async function toggleProductStatus(product) {
       Verifizierter Onlineshop:
     </s-text>
 
-    <s-text>
-      {verifiedShopUrl}
-    </s-text>
+<s-banner tone="success">
+  {verifiedShopUrl}
+</s-banner>
   </s-stack>
 ) : (
-  <s-text>
-    Keine verifizierte Shop-Adresse verfügbar.
-  </s-text>
+<s-banner tone="critical">
+  Keine verifizierte Shop-Adresse verfügbar.
+  Bitte reichen Sie Ihre Anbieter-Verifizierung erneut ein.
+</s-banner>
 )}
 
                 <s-button
@@ -1617,29 +1662,43 @@ async function toggleProductStatus(product) {
                       </s-text>
 
                       <s-checkbox
+                        label="Alle auswählen"
                         checked={
-                          shopImportProducts.length > 0 &&
+                          shopImportProducts.some(
+                            (url) => !marketplaceProducts.some(
+                              (product) =>
+                                product.status !== 'deleted' &&
+                                normalizeProductUrl(product.sourceUrl) === normalizeProductUrl(url)
+                            )
+                          ) &&
                           shopImportSelected.length ===
                             Math.min(
-                              shopImportProducts.length,
+                              shopImportProducts.filter(
+                                (url) => !marketplaceProducts.some(
+                                  (product) =>
+                                    product.status !== 'deleted' &&
+                                    normalizeProductUrl(product.sourceUrl) === normalizeProductUrl(url)
+                                )
+                              ).length,
                               packageData.availableProducts
                             )
                         }
                         onChange={(event) => {
                           if (event.currentTarget.checked) {
                             setShopImportSelected(
-                              shopImportProducts.slice(
-                                0,
-                                packageData.availableProducts
-                              )
+                              shopImportProducts.filter(
+                                (url) => !marketplaceProducts.some(
+                                  (product) =>
+                                    product.status !== 'deleted' &&
+                                    normalizeProductUrl(product.sourceUrl) === normalizeProductUrl(url)
+                                )
+                              ).slice(0, packageData.availableProducts)
                             );
                           } else {
                             setShopImportSelected([]);
                           }
                         }}
-                      >
-                        Alle verfügbaren Produkte auswählen
-                      </s-checkbox>
+                      />
 
                       <s-box
                         border="base solid"
@@ -1651,7 +1710,7 @@ async function toggleProductStatus(product) {
                           {visibleShopImportProducts.map((url, index) => {
 const alreadyImported = marketplaceProducts.some(
   (product) =>
-    product.sourceUrl === url &&
+    normalizeProductUrl(product.sourceUrl) === normalizeProductUrl(url) &&
     product.status !== 'deleted'
 );
                             const selected =
@@ -1690,9 +1749,9 @@ label={`${(currentImportPage - 1) * importPageSize + index + 1}. ${decodeURIComp
                                   }}
                                 />
 {alreadyImported && (
-  <s-text color="success">
+  <s-banner tone="success">
     ✓ Bereits importiert
-  </s-text>
+  </s-banner>
 )}
 
 <s-button
@@ -1837,11 +1896,22 @@ label={`${(currentImportPage - 1) * importPageSize + index + 1}. ${decodeURIComp
                         </s-button>
                       )}
 
+                      <s-stack direction="inline" gap="small" wrap>
+                        <s-text>Pro Seite:</s-text>
+                        <s-button disabled={importPageSize === 100} onClick={() => { setImportPageSize(100); setImportPage(1); }}>100</s-button>
+                        <s-button disabled={importPageSize === 200} onClick={() => { setImportPageSize(200); setImportPage(1); }}>200</s-button>
+                        <s-button disabled={currentImportPage <= 1} onClick={() => setImportPage(currentImportPage - 1)}>Zurück</s-button>
+                        <s-text>Seite {currentImportPage} von {importPageCount}</s-text>
+                        <s-button disabled={currentImportPage >= importPageCount} onClick={() => setImportPage(currentImportPage + 1)}>Weiter</s-button>
+                      </s-stack>
+
                       {shopImportRunning && (
                         <s-banner tone="warning">
                           Bitte lassen Sie diese Seite während des Imports geöffnet und aktualisieren Sie diese nicht.
                         </s-banner>
                       )}
+
+
 
                       {shopImportRunning && (
                         <s-text>
@@ -2106,6 +2176,7 @@ label={`${(currentImportPage - 1) * importPageSize + index + 1}. ${decodeURIComp
 
         <s-section heading="Ihre Produkte">
 
+          <s-box paddingBlockEnd="base">
           <s-button
             variant="primary"
             onClick={publishAllProducts}
@@ -2124,6 +2195,7 @@ label={`${(currentImportPage - 1) * importPageSize + index + 1}. ${decodeURIComp
               ? `Wird übertragen (${bulkPublishProgress.done} von ${bulkPublishProgress.total})...`
               : 'Alle an Marktblatt übertragen'}
           </s-button>
+          </s-box>
 
           <s-stack
             direction="block"
@@ -2402,10 +2474,6 @@ label={`${(currentImportPage - 1) * importPageSize + index + 1}. ${decodeURIComp
     </s-page>
   );
 }
-
-
-
-
 
 
 

@@ -251,7 +251,7 @@ setCompanyDataSaved(true);
       error ||
       !companyDataSaved ||
       !documentUploaded ||
-      !['not_submitted', 'rejected'].includes(status)
+      !['not_submitted', 'rejected', 'unverified'].includes(status)
     ) {
       return;
     }
@@ -313,6 +313,9 @@ setCompanyDataSaved(true);
       case 'rejected':
         return 'Ihre Verifizierung wurde abgelehnt. Bitte beachten Sie die Rückmeldung von Marktblatt.';
 
+      case 'unverified':
+        return 'Ihre Anbieter-Verifizierung wurde aufgehoben. Bitte reichen Sie Ihre Verifizierung erneut ein.';
+
       default:
         return 'Ihr Anbieterprofil ist noch nicht verifiziert.';
     }
@@ -324,13 +327,13 @@ setCompanyDataSaved(true);
         return 'success';
 
       case 'rejected':
+      case 'unverified':
         return 'critical';
 
       default:
         return 'warning';
     }
   }
-
   return (
     <s-page heading="Anbieter-Verifizierung">
       <s-stack direction="block" gap="base">
@@ -512,7 +515,7 @@ onInput={(event) => {
           <s-stack direction="block" gap="base">
 
             {status === 'not_submitted' ||
-            status === 'rejected' ? (
+            status === 'rejected' || status === 'unverified' ? (
               <>
                 <s-text>
                   Sobald Ihre Unternehmensdaten gespeichert
@@ -548,7 +551,7 @@ onInput={(event) => {
                 >
                   {submitting
                     ? 'Antrag wird eingereicht ...'
-                    : 'Verifizierung einreichen'}
+                    : status === 'unverified' ? 'Verifizierung erneut einreichen' : 'Verifizierung einreichen'}
                 </s-button>
               </>
             ) : (
