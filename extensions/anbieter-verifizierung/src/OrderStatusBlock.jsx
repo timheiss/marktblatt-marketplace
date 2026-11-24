@@ -359,7 +359,7 @@ setCompanyDataSaved(true);
               </s-banner>
             )}
 
-            {status === 'rejected' && reviewNote && !error && (
+            {!loading && ['rejected', 'unverified'].includes(status) && reviewNote && !error && (
               <s-banner tone="warning">
                 Rückmeldung von Marktblatt: {reviewNote}
               </s-banner>

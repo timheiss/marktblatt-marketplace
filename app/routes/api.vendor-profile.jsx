@@ -169,7 +169,7 @@ async function loadVendorLogoImages(profile) {
 function formatProfile(profile) {
   return {
     verificationStatus:
-      profile?.verificationStatus ?? "unverified",
+      profile?.verificationStatus ?? "not_submitted",
 
     verificationShopUrl:
       profile?.verificationStatus === "verified"

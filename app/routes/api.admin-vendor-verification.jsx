@@ -202,6 +202,16 @@ export const action = async ({ request }) => {
     );
   }
 
+  if (decision === "unverified" && !note) {
+    return respond(
+      {
+        success: false,
+        error: "Bitte eine Begründung für die Aufhebung eingeben.",
+      },
+      400
+    );
+  }
+
   if (decision === "rejected" && !note) {
     return respond(
       {

@@ -1,4 +1,4 @@
-﻿import '@shopify/ui-extensions/preact';
+import '@shopify/ui-extensions/preact';
 import {render} from 'preact';
 import {useEffect, useState} from 'preact/hooks';
 const API_BASE_URL = 'https://marktblatt-marketplace.onrender.com';
@@ -32,6 +32,7 @@ useEffect(() => {
   setReviewError('');
   setReviewSuccess('');
   setReviewNote('');
+  setConfirmRevocation(false);
   setVerification(null);
   setTokenAvailable(false);
   setConnectionError('');
@@ -165,6 +166,16 @@ async function reviewVendor(decision) {
   }
 
   const note = reviewNote.trim();
+
+  if (decision === 'unverified' && !note) {
+    setReviewError('Bitte eine Begründung für die Aufhebung eingeben.');
+    return;
+  }
+
+  if (note.length > 2000) {
+    setReviewError('Die Begründung darf maximal 2000 Zeichen enthalten.');
+    return;
+  }
 
   if (decision === 'rejected' && !note) {
     setReviewError('Bitte eine Begründung für die Ablehnung eingeben.');
@@ -356,7 +367,12 @@ setConfirmRevocation(false);
           <s-button
             tone="critical"
             disabled={reviewing}
-            onClick={() => setConfirmRevocation(true)}
+            onClick={() => {
+              setReviewNote('');
+              setReviewError('');
+              setReviewSuccess('');
+              setConfirmRevocation(true);
+            }}
           >
             Verifizierung aufheben
           </s-button>
@@ -367,10 +383,27 @@ setConfirmRevocation(false);
               Bereits veröffentlichte Produkte bleiben online.
             </s-banner>
 
+            <s-text-field
+              label="Begründung / Anmerkung"
+              value={reviewNote}
+              disabled={reviewing}
+              onInput={(event) =>
+                setReviewNote(event.currentTarget.value)
+              }
+            />
+
+            <s-text>
+              Pflichtfeld. Maximal 2000 Zeichen.
+            </s-text>
+
             <s-stack direction="inline" gap="small">
               <s-button
                 tone="critical"
-                disabled={reviewing}
+                disabled={
+                  reviewing ||
+                  !reviewNote.trim() ||
+                  reviewNote.trim().length > 2000
+                }
                 onClick={() => reviewVendor('unverified')}
               >
                 {reviewing ? 'Wird aufgehoben...' : 'Ja, Verifizierung aufheben'}
@@ -378,7 +411,11 @@ setConfirmRevocation(false);
 
               <s-button
                 disabled={reviewing}
-                onClick={() => setConfirmRevocation(false)}
+                onClick={() => {
+                  setReviewNote('');
+                  setReviewError('');
+                  setConfirmRevocation(false);
+                }}
               >
                 Abbrechen
               </s-button>

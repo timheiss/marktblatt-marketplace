@@ -113,6 +113,9 @@ const [packageData, setPackageData] = useState({
    */
 
 const [verifiedShopUrl, setVerifiedShopUrl] = useState('');
+
+const [verificationStatus, setVerificationStatus] =
+  useState(null);
   const [shopImportSearching, setShopImportSearching] =
     useState(false);
 
@@ -434,6 +437,12 @@ setShopImportPreviewLoading(true);
   const [saveMessage, setSaveMessage] =
     useState(null);
 
+  const [bulkActionMessage, setBulkActionMessage] =
+    useState(null);
+
+  const [bulkActionError, setBulkActionError] =
+    useState(null);
+
 
   /*
    * =======================================================
@@ -471,6 +480,8 @@ const [changingCompareAtPrices, setChangingCompareAtPrices] =
 const [bulkStatusAction, setBulkStatusAction] =
   useState(null);
 
+const bulkStatusActionRef = useRef(false);
+
 async function loadVerifiedShopUrl() {
   try {
     const token = await shopify.sessionToken.get();
@@ -495,6 +506,10 @@ async function loadVerifiedShopUrl() {
 
     const profile = data.profile;
 
+    setVerificationStatus(
+      profile?.verificationStatus ?? null
+    );
+
     setVerifiedShopUrl(
       profile?.verificationStatus === 'verified'
         ? profile?.verificationShopUrl || ''
@@ -503,6 +518,7 @@ async function loadVerifiedShopUrl() {
   } catch (error) {
     console.error('VERIFIED SHOP LOAD ERROR:', error);
     setVerifiedShopUrl('');
+    setVerificationStatus(null);
   }
 }
 
@@ -523,7 +539,7 @@ useEffect(() => {
    * =======================================================
    */
 
-  async function loadProducts() {
+  async function loadProducts({bulk = false} = {}) {
     try {
       setLoadingProducts(true);
 
@@ -591,11 +607,18 @@ setPackageData({
         err
       );
 
-      setError(
+      const message =
         err instanceof Error
           ? err.message
-          : 'Produkte konnten nicht geladen werden.'
-      );
+          : 'Produkte konnten nicht geladen werden.';
+
+      if (bulk) {
+        setBulkActionError(
+          'Die Produktliste konnte nicht neu geladen werden: ' + message
+        );
+      } else {
+        setError(message);
+      }
 
     } finally {
       setLoadingProducts(false);
@@ -829,6 +852,7 @@ setPackageData({
 
   async function refreshAllProducts() {
     if (
+      bulkStatusActionRef.current ||
       bulkRefreshingRef.current ||
       bulkPublishingRef.current ||
       publishingIdsRef.current.size > 0
@@ -842,7 +866,9 @@ setPackageData({
     );
 
     if (!products.length) {
-      setSaveMessage('Keine Produkte mit einer Quelladresse zur Aktualisierung vorhanden.');
+      setBulkActionError(null);
+      setBulkRefreshErrors([]);
+      setBulkActionMessage('Keine Produkte mit einer Quelladresse zur Aktualisierung vorhanden.');
       return;
     }
 
@@ -855,8 +881,8 @@ setPackageData({
       failed: 0,
     });
     setBulkRefreshErrors([]);
-    setError(null);
-    setSaveMessage(null);
+    setBulkActionError(null);
+    setBulkActionMessage(null);
 
     let succeeded = 0;
     let failed = 0;
@@ -907,18 +933,18 @@ setPackageData({
       }
 
       setBulkRefreshErrors(errors);
-      setSaveMessage(
+      setBulkActionMessage(
         `${succeeded} Produkte aktualisiert, ${failed} fehlgeschlagen.`
       );
     } catch (err) {
-      setError(
+      setBulkActionError(
         err?.message || 'Die Sammelaktualisierung ist fehlgeschlagen.'
       );
     } finally {
       try {
-        await loadProducts();
+        await loadProducts({bulk: true});
       } catch (err) {
-        setError(
+        setBulkActionError(
           err?.message || 'Die Produktliste konnte nicht neu geladen werden.'
         );
       } finally {
@@ -1045,14 +1071,23 @@ async function changeCompareAtPrices(enabled) {
  */
 
 async function changeAllProductStatuses(status) {
-  if (bulkStatusAction) {
+  if (
+    bulkStatusActionRef.current ||
+    bulkRefreshingRef.current ||
+    bulkPublishingRef.current ||
+    publishingIdsRef.current.size > 0 ||
+    loadingProducts
+  ) {
     return;
   }
 
+  bulkStatusActionRef.current = true;
+
   try {
     setBulkStatusAction(status);
-    setError(null);
-    setSaveMessage(null);
+    setBulkRefreshErrors([]);
+    setBulkActionError(null);
+    setBulkActionMessage(null);
 
     /*
      * Nur Produkte berücksichtigen, die bereits
@@ -1064,7 +1099,7 @@ async function changeAllProductStatuses(status) {
       );
 
     if (publishedProducts.length === 0) {
-      setSaveMessage(
+      setBulkActionMessage(
         'Es wurden noch keine Produkte an Marktblatt übertragen.'
       );
       return;
@@ -1105,7 +1140,7 @@ if (productsToChange.length === 0) {
     status === 'active' &&
     adminLockedProducts.length > 0
   ) {
-    setSaveMessage(
+    setBulkActionMessage(
       `${adminLockedProducts.length} ${
         adminLockedProducts.length === 1
           ? 'Produkt wurde'
@@ -1117,7 +1152,7 @@ if (productsToChange.length === 0) {
       } nur durch Marktblatt wieder aktiviert werden.`
     );
   } else {
-    setSaveMessage(
+    setBulkActionMessage(
       status === 'active'
         ? 'Alle übertragenen Produkte sind bereits aktiviert.'
         : 'Alle übertragenen Produkte sind bereits deaktiviert.'
@@ -1164,13 +1199,13 @@ if (productsToChange.length === 0) {
       }
     }
 
-    await loadProducts();
+    await loadProducts({bulk: true});
 
 if (
   status === 'active' &&
   adminLockedProducts.length > 0
 ) {
-  setSaveMessage(
+  setBulkActionMessage(
     `${productsToChange.length} ${
       productsToChange.length === 1
         ? 'Produkt wurde'
@@ -1190,7 +1225,7 @@ if (
     }.`
   );
 } else {
-  setSaveMessage(
+  setBulkActionMessage(
     status === 'active'
       ? `${productsToChange.length} Produkte wurden aktiviert.`
       : `${productsToChange.length} Produkte wurden deaktiviert.`
@@ -1207,15 +1242,16 @@ if (
      * Liste neu laden, weil vor einem möglichen Fehler
      * bereits einige Produkte geändert worden sein können.
      */
-    await loadProducts();
+    await loadProducts({bulk: true});
 
-    setError(
+    setBulkActionError(
       err instanceof Error
         ? err.message
         : 'Die Produktstatus konnten nicht geändert werden.'
     );
 
   } finally {
+    bulkStatusActionRef.current = false;
     setBulkStatusAction(null);
   }
 }
@@ -1402,7 +1438,35 @@ async function toggleProductStatus(product) {
         gap="base"
       >
 
-        {/* PAKET */}
+        {/* ANBIETER-VERIFIZIERUNGSSTATUS */}
+
+{verificationStatus === 'unverified' && (
+  <s-banner tone="critical">
+    Ihre Anbieter-Verifizierung wurde aufgehoben.
+    Bitte reichen Sie Ihre Verifizierung erneut ein.
+  </s-banner>
+)}
+
+{verificationStatus === 'rejected' && (
+  <s-banner tone="critical">
+    Ihre Verifizierung wurde abgelehnt.
+    Bitte beachten Sie die Rückmeldung von Marktblatt.
+  </s-banner>
+)}
+
+{verificationStatus === 'pending' && (
+  <s-banner tone="warning">
+    Ihre Verifizierung wird derzeit von Marktblatt geprüft.
+  </s-banner>
+)}
+
+{verificationStatus === 'not_submitted' && (
+  <s-banner tone="warning">
+    Ihr Anbieterprofil ist noch nicht verifiziert.
+  </s-banner>
+)}
+
+{/* PAKET */}
 
 <s-section heading="Ihr Paket">
 
@@ -1504,7 +1568,13 @@ async function toggleProductStatus(product) {
   onClick={() =>
     changeAllProductStatuses('active')
   }
-  disabled={bulkStatusAction !== null}
+  disabled={
+    bulkStatusAction !== null ||
+    bulkRefreshing ||
+    bulkPublishing ||
+    Object.keys(publishingProductIds).length > 0 ||
+    loadingProducts
+  }
 >
   {bulkStatusAction === 'active'
     ? 'Alle werden aktiviert...'
@@ -1515,7 +1585,13 @@ async function toggleProductStatus(product) {
   onClick={() =>
     changeAllProductStatuses('inactive')
   }
-  disabled={bulkStatusAction !== null}
+  disabled={
+    bulkStatusAction !== null ||
+    bulkRefreshing ||
+    bulkPublishing ||
+    Object.keys(publishingProductIds).length > 0 ||
+    loadingProducts
+  }
 >
   {bulkStatusAction === 'inactive'
     ? 'Alle werden deaktiviert...'
@@ -1523,6 +1599,39 @@ async function toggleProductStatus(product) {
 </s-button>
 
     </s-stack>
+
+    {bulkActionMessage && (
+      <s-banner
+        tone={bulkRefreshErrors.length > 0 ? 'warning' : 'success'}
+        heading={bulkRefreshErrors.length > 0 ? 'Teilweise aktualisiert' : 'Erfolgreich'}
+      >
+        {bulkActionMessage}
+      </s-banner>
+    )}
+
+    {bulkActionError && (
+      <s-banner tone="critical" heading="Fehler">
+        {bulkActionError}
+      </s-banner>
+    )}
+
+{/* FEHLERÜBERSICHT SAMMELAKTUALISIERUNG */}
+
+{bulkRefreshErrors.length > 0 && (
+  <s-banner
+    tone="critical"
+    heading={`${bulkRefreshErrors.length} Produkte konnten nicht aktualisiert werden`}
+  >
+    <s-stack direction="block" gap="small">
+      {bulkRefreshErrors.map((item) => (
+        <s-text key={item.productId}>
+          {item.title}: {item.message}
+        </s-text>
+      ))}
+    </s-stack>
+  </s-banner>
+)}
+
 
 <s-stack
   direction="block"
@@ -2147,29 +2256,14 @@ label={`${(currentImportPage - 1) * importPageSize + index + 1}. ${decodeURIComp
 
 {saveMessage && (
   <s-banner
-    tone={bulkRefreshErrors.length > 0 ? 'warning' : 'success'}
-    heading={bulkRefreshErrors.length > 0 ? 'Teilweise aktualisiert' : 'Erfolgreich'}
+    tone="success"
+    heading="Erfolgreich"
   >
     {saveMessage}
   </s-banner>
 )}
 
-{/* FEHLERÜBERSICHT SAMMELAKTUALISIERUNG */}
 
-{bulkRefreshErrors.length > 0 && (
-  <s-banner
-    tone="critical"
-    heading={`${bulkRefreshErrors.length} Produkte konnten nicht aktualisiert werden`}
-  >
-    <s-stack direction="block" gap="small">
-      {bulkRefreshErrors.map((item) => (
-        <s-text key={item.productId}>
-          {item.title}: {item.message}
-        </s-text>
-      ))}
-    </s-stack>
-  </s-banner>
-)}
 
 
         {/* PRODUKTLISTE */}
@@ -2474,6 +2568,3 @@ label={`${(currentImportPage - 1) * importPageSize + index + 1}. ${decodeURIComp
     </s-page>
   );
 }
-
-
-
